@@ -1,0 +1,31 @@
+# Google ADK and Agent Engine
+google-adk
+google-genai
+google-cloud-aiplatform
+
+# Async utilities
+nest-asyncio
+
+# API and HTTP
+requests
+httpx
+aiohttp
+feedparser
+
+# Redis for caching
+redis
+hiredis
+
+# Environment variables
+python-dotenv
+
+# Data validation
+pydantic
+pydantic-settings
+
+# Utilities
+python-dateutil
+pytz
+
+# Logging
+loguru

@@ -1,0 +1,38 @@
+version: 1.0
+
+agents:
+  orchestrator:
+    type: llm
+    model: gemini-2.0-flash-exp
+    name: orchestrator_agent
+    description: Main orchestrator for multi-agent stock analysis system
+    module: src.agents.orchestrator
+    class: OrchestratorAgent
+    
+  news:
+    type: llm
+    model: gemini-2.0-flash-exp
+    name: news_agent
+    description: News intelligence and sentiment analysis agent
+    
+  fundamental:
+    type: llm
+    model: gemini-2.0-flash-exp
+    name: fundamental_agent
+    description: Financial metrics and growth analysis agent
+    
+  index:
+    type: llm
+    model: gemini-2.0-flash-exp
+    name: index_agent
+    description: Index composition and performance analysis agent
+    
+  synthesis:
+    type: llm
+    model: gemini-2.0-flash-exp
+    name: synthesis_agent
+    description: Multi-source synthesis and reporting agent
+
+settings:
+  log_level: INFO
+  default_agent: orchestrator
