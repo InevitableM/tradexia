@@ -48,3 +48,12 @@ logs/
 # Cache
 .cache/
 *.cache
+
+# ADK Session Data
+.adk/
+*.db
+*.sqlite3
+
+# Safety catch for all env files
+.env*
+!.env.example
