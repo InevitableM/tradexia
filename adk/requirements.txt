@@ -29,3 +29,7 @@ pytz
 
 # Logging
 loguru
+
+# Scraping and Data Analysis
+beautifulsoup4
+pandas

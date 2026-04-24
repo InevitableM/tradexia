@@ -22,9 +22,7 @@ _thread_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="agent-execu
 # Register all available agents
 registry = get_agent_registry()
 registry.register("news", news_llm_agent)
-registry.register("synthesis", synthesis_llm_agent)
 registry.register("fundamental", fundamental_llm_agent)
-registry.register("index", index_llm_agent)
 
 logger.info(f"Registered agents: {registry.list_agents()}")
 
@@ -136,24 +134,22 @@ Your role:
 Available Agents:
 - news: News analysis and sentiment for stocks
 - fundamental: Financial metrics, growth analysis, company fundamentals
-- index: Index composition, performance, sector analysis
-- synthesis: Multi-source synthesis and comprehensive reporting
 
 Execution Strategies:
 
 1. PARALLEL EXECUTION (use call_agents_parallel):
    - When agents work independently
-   - Example: News + Fundamental + Index can all analyze simultaneously
+   - Example: News + Fundamental can all analyze simultaneously
    - Faster execution for comprehensive analysis
    
 2. SEQUENTIAL EXECUTION (use call_agents_sequential):
    - When later agents need earlier results
-   - Example: [news, fundamental, index] → synthesis
+   - Example: [news, fundamental] 
    - Use when synthesis needs to combine multiple analyses
 
 Decision Guidelines:
 - Single topic (just news) → call_agents_parallel with ["news"]
-- Comprehensive analysis → call_agents_parallel with ["news", "fundamental", "index"], then call_agents_sequential with ["synthesis"] if needed
+- Comprehensive analysis → call_agents_parallel with ["news", "fundamental"], then call_agents_sequential with ["synthesis"] if needed
 - Quick analysis → call_agents_parallel with relevant agents
 - Deep analysis → parallel first, then sequential for synthesis
 

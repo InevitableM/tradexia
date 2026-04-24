@@ -15,8 +15,54 @@ class AgentExecutor:
         """Initialize agent executor."""
         self.main_runner = get_main_runner()
         self.registry = get_agent_registry()
+        # Cache wrapper agents and runners to avoid re-parenting singleton sub-agents
+        self._wrapper_agents: Dict[str, Any] = {}
+        self._runners: Dict[str, Any] = {}
         logger.info("Agent executor initialized")
     
+    def _get_or_create_wrapper(self, mode: str, agent_names: List[str], agents: list):
+        """Get a cached wrapper agent+runner, or create one if it doesn't exist yet.
+        
+        ADK sets a parent pointer on each sub-agent when it's added to a
+        ParallelAgent/SequentialAgent. Re-creating the wrapper with the same
+        singleton sub-agents on every request raises:
+            'Agent X already has a parent agent'
+        
+        We avoid this by creating each (mode, frozenset(agent_names)) combination
+        exactly once and reusing it for all subsequent requests.
+        """
+        # Use a stable cache key: mode + sorted agent names
+        cache_key = f"{mode}::{':'.join(sorted(agent_names))}"
+        
+        if cache_key not in self._wrapper_agents:
+            app_name = f"tradexia_{mode}_executor"
+            logger.info(f"Creating new {mode} wrapper agent for key: {cache_key}")
+            
+            if mode == "parallel":
+                wrapper_agent = create_parallel_agent(
+                    name=f"parallel_executor",
+                    sub_agents=agents,
+                    description=f"Executes {len(agents)} agents in parallel"
+                )
+            else:  # sequential
+                wrapper_agent = create_sequential_agent(
+                    name=f"sequential_executor",
+                    sub_agents=agents,
+                    description=f"Executes {len(agents)} agents sequentially"
+                )
+            
+            runner = self.main_runner.create_runner(
+                agent=wrapper_agent,
+                app_name=app_name
+            )
+            
+            self._wrapper_agents[cache_key] = wrapper_agent
+            self._runners[cache_key] = runner
+        else:
+            logger.info(f"Reusing cached {mode} wrapper agent for key: {cache_key}")
+        
+        return self._runners[cache_key]
+
     async def execute_agents(
         self,
         agent_names: List[str],
@@ -52,29 +98,13 @@ class AgentExecutor:
                     "available_agents": self.registry.list_agents()
                 }
             
-            agents = list(agents_dict.values())
-            
-            # Create wrapper agent based on mode
-            if mode == "parallel":
-                wrapper_agent = create_parallel_agent(
-                    name="parallel_executor",
-                    sub_agents=agents,
-                    description=f"Executes {len(agents)} agents in parallel"
-                )
-            elif mode == "sequential":
-                wrapper_agent = create_sequential_agent(
-                    name="sequential_executor",
-                    sub_agents=agents,
-                    description=f"Executes {len(agents)} agents sequentially"
-                )
-            else:
+            if mode not in ("parallel", "sequential"):
                 return {"error": f"Invalid mode: {mode}. Use 'parallel' or 'sequential'"}
             
-            # Create runner for wrapper agent
-            runner = self.main_runner.create_runner(
-                agent=wrapper_agent,
-                app_name=f"tradexia_{mode}_executor"
-            )
+            agents = list(agents_dict.values())
+            
+            # Get or create the wrapper agent+runner (cached to avoid re-parenting)
+            runner = self._get_or_create_wrapper(mode, agent_names, agents)
             
             # Get or create session
             if not session_id:
@@ -123,7 +153,7 @@ class AgentExecutor:
             results["mode"] = mode
             results["agents_executed"] = agent_names
             
-            logger.info(f"{mode.capitalize()} execution completed for {len(agent_names)} agents")
+            logger.info(f"{mode.capitalize()} execution completed for {len(agent_names)} agents", results)
             return results
             
         except Exception as e:

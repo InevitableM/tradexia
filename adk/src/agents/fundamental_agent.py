@@ -2,6 +2,9 @@
 from google.adk.agents import LlmAgent
 from typing import Dict, Any
 from loguru import logger
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
 from ..tools.backend_client import get_backend_client
 from ..cache import get_cache_client
 
@@ -79,6 +82,75 @@ def evaluate_company_plans(symbol: str) -> Dict[str, Any]:
         return {"error": str(e)}
 
 
+def get_screener_data(symbol: str) -> Dict[str, Any]:
+    """Scrapes comprehensive fundamental data for an Indian stock from Screener.in.
+    
+    Includes key ratios, quarterly results, profit & loss statements, 
+    balance sheets, and cash flow data.
+    
+    Args:
+        symbol: Stock symbol (e.g., 'TCS', 'RELIANCE')
+        
+    Returns:
+        Dict containing key metrics and financial tables
+    """
+    try:
+        url = f"https://www.screener.in/company/{symbol}/"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        
+        logger.info(f"Scraping screener data for {symbol}")
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        data = {}
+
+        # 1. TOP RATIOS (Key Metrics)
+        ratios = soup.select("ul#top-ratios li")
+        key_metrics = {}
+        for item in ratios:
+            name = item.select_one("span.name")
+            value = item.select_one("span.number")
+            if name and value:
+                key = name.text.strip()
+                val = value.text.strip()
+                key_metrics[key] = val
+        data["key_metrics"] = key_metrics
+
+        # 2. TABLE PARSER
+        def parse_table(section_id):
+            section = soup.find("section", {"id": section_id})
+            if not section:
+                return None
+            table = section.find("table")
+            if not table:
+                return None
+            
+            headers = [th.text.strip() for th in table.find_all("th")]
+            rows = []
+            for tr in table.find_all("tr")[1:]:
+                cols = [td.text.strip() for td in tr.find_all(["td", "th"])]
+                if len(cols) == len(headers):
+                    rows.append(cols)
+            
+            # Convert to list of dicts for LLM readability
+            if rows:
+                df = pd.DataFrame(rows, columns=headers)
+                return df.to_dict(orient='records')
+            return None
+
+        # 3. FINANCIAL TABLES
+        data["quarterly"] = parse_table("quarters")
+        data["profit_loss"] = parse_table("profit-loss")
+        data["balance_sheet"] = parse_table("balance-sheet")
+        data["cash_flow"] = parse_table("cash-flow")
+
+        return data
+    except Exception as e:
+        logger.error(f"Error scraping screener data for {symbol}: {e}")
+        return {"error": f"Failed to fetch data for {symbol}: {str(e)}"}
+
+
 # Create Fundamental LlmAgent
 fundamental_llm_agent = LlmAgent(
     model='gemini-2.5-flash',
@@ -97,7 +169,7 @@ fundamental_llm_agent = LlmAgent(
     Provide comprehensive analysis with proper valuation context.
     Always consider both quantitative metrics and qualitative factors.
     """,
-    tools=[get_financial_metrics, analyze_growth_trends, evaluate_company_plans],
+    tools=[get_financial_metrics, analyze_growth_trends, evaluate_company_plans, get_screener_data],
 )
 
 logger.info("Fundamental Analysis Agent initialized")

@@ -1,7 +1,11 @@
 """Configuration management for Tradexia ADK agents."""
 import os
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+# Always resolve .env relative to this file's directory (i.e. src/.env)
+_ENV_FILE = Path(__file__).parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -27,7 +31,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     
     class Config:
-        env_file = ".env"
+        env_file = str(_ENV_FILE)
         case_sensitive = False
 
 
