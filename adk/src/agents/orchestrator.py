@@ -23,6 +23,7 @@ _thread_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="agent-execu
 registry = get_agent_registry()
 registry.register("news", news_llm_agent)
 registry.register("fundamental", fundamental_llm_agent)
+registry.register("synthesis", synthesis_llm_agent)
 
 logger.info(f"Registered agents: {registry.list_agents()}")
 
@@ -134,6 +135,7 @@ Your role:
 Available Agents:
 - news: News analysis and sentiment for stocks
 - fundamental: Financial metrics, growth analysis, company fundamentals
+- synthesis: Synthesis of all analyses
 
 Execution Strategies:
 

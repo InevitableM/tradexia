@@ -116,7 +116,7 @@ class AgentExecutor:
                 user_id=user_id,
                 session_id=session_id,
             )
-            
+        
             if not session:
                 session = await runner.session_service.create_session(
                     app_name=runner.app_name,

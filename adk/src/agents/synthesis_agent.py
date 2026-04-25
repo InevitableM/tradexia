@@ -64,7 +64,7 @@ synthesis_llm_agent = LlmAgent(
     - Acknowledge uncertainties and limitations
     - Present multiple scenarios when appropriate
     """,
-    tools=[synthesize_analysis, generate_report],
+    tools=[synthesize_analysis],
 )
 
 logger.info("Synthesis Agent initialized")
