@@ -1,43 +1,55 @@
 """Synthesis Agent - Combines insights from all specialized agents."""
 from google.adk.agents import LlmAgent
+from google.adk.tools.tool_context import ToolContext
 from typing import Dict, Any
 from loguru import logger
 
 
-def synthesize_analysis(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Synthesizes insights from multiple analysis sources.
-    
-    Args:
-        data: Combined data from news, fundamental, and index agents
-        
+def synthesize_analysis(tool_context: ToolContext) -> Dict[str, Any]:
+    """Reads news and fundamental analyses from session state.
+
+    ADK automatically injects tool_context, giving full access to session.state.
+    Call this tool to access the raw data if you need it for deeper processing.
+
     Returns:
-        Comprehensive synthesized analysis with recommendations
+        Dict with news_analysis and fundamental_analysis from session state
     """
-    try:
-        return {
-            "synthesis": "Multi-source analysis complete",
-            "key_insights": [],
-            "recommendations": [],
-            "risk_factors": [],
-            "opportunities": []
-        }
-    except Exception as e:
-        logger.error(f"Error synthesizing analysis: {e}")
-        return {"error": str(e)}
+    news_result = tool_context.state.get("news_result", "News analysis not available")
+    fundamental_result = tool_context.state.get("fundamental_result", "Fundamental analysis not available")
+
+    logger.info("[synthesize_analysis] Reading from session state:")
+    logger.info(f"  news_result      : {len(str(news_result))} chars → {str(news_result)[:200]}")
+    logger.info(f"  fundamental_result: {len(str(fundamental_result))} chars → {str(fundamental_result)[:200]}")
+
+    return {
+        "news_analysis": news_result,
+        "fundamental_analysis": fundamental_result,
+    }
 
 
-def generate_report(symbol: str, analysis_data: Dict[str, Any]) -> str:
-    """Generates a comprehensive analysis report.
-    
+def generate_report(symbol: str, tool_context: ToolContext) -> str:
+    """Generates a formatted analysis report for a stock symbol.
+
+    Reads news_result and fundamental_result from session state.
+    ADK injects tool_context automatically — do not pass it manually.
+
     Args:
-        symbol: Stock or index symbol
-        analysis_data: Combined analysis from all agents
-        
+        symbol: Stock symbol (e.g. 'TCS', 'RELIANCE')
+
     Returns:
-        Formatted analysis report
+        Formatted report string
     """
     try:
-        return f"Comprehensive Analysis Report for {symbol}\n[Backend integration pending]"
+        news = tool_context.state.get("news_result", "N/A")
+        fundamentals = tool_context.state.get("fundamental_result", "N/A")
+
+        logger.info(f"[generate_report] Building report for {symbol}")
+
+        return (
+            f"=== Comprehensive Analysis Report: {symbol} ===\n\n"
+            f"--- NEWS & SENTIMENT ---\n{news}\n\n"
+            f"--- FUNDAMENTALS ---\n{fundamentals}\n"
+        )
     except Exception as e:
         logger.error(f"Error generating report: {e}")
         return f"Error: {str(e)}"

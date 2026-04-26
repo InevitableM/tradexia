@@ -1,12 +1,16 @@
 """Fundamental Analysis Agent - Evaluates financial metrics and company fundamentals."""
 from google.adk.agents import LlmAgent
-from typing import Dict, Any
+from google.adk.agents.callback_context import CallbackContext
+from typing import Dict, Any, Optional
 from loguru import logger
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
+from datetime import datetime
+import threading
 from ..tools.backend_client import get_backend_client
 from ..cache import get_cache_client
+
 
 
 def get_financial_metrics(symbol: str) -> Dict[str, Any]:
@@ -150,12 +154,32 @@ def get_screener_data(symbol: str) -> Dict[str, Any]:
         logger.error(f"Error scraping screener data for {symbol}: {e}")
         return {"error": f"Failed to fetch data for {symbol}: {str(e)}"}
 
+# ── Parallel-execution verification callback ─────────────────────────────────
+def _fundamental_before_callback(callback_context: CallbackContext) -> Optional[object]:
+    """Logs start time + thread ID so we can verify parallel execution.
+
+    Compare with the news_agent log line:
+      - Same time + same thread  → sequential (bad)
+      - Same time + diff thread  → true parallel (good)
+    """
+    now = datetime.now()
+    thread_id = threading.get_ident()
+    logger.info(
+        f"┌ [PARALLEL CHECK] fundamental_analysis_agent STARTED"
+        f" | time={now.strftime('%H:%M:%S.%f')[:-3]}"
+        f" | thread_id={thread_id}"
+    )
+    return None  # None = let the agent run normally
+
 
 # Create Fundamental LlmAgent
 fundamental_llm_agent = LlmAgent(
     model='gemini-2.5-flash',
     name='fundamental_analysis_agent',
     description='Analyzes company fundamentals and financial health',
+    # output_key tells ADK to automatically save this agent's final response
+    # into session.state["fundamental_result"] so other agents can read it.
+    output_key='fundamental_result',
     instruction="""You are a fundamental analysis expert for Indian stock markets.
     
     Your responsibilities:

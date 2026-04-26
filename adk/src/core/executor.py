@@ -1,11 +1,39 @@
 """Agent Executor - Dynamic execution of agents in parallel or sequential mode."""
 from typing import List, Dict, Any, Optional
 from google.genai import types
+from google.adk.events import Event, EventActions
 import asyncio
 from loguru import logger
 from .runner import get_main_runner
 from .agents import create_parallel_agent, create_sequential_agent
 from .registry import get_agent_registry
+
+
+async def update_session_state(session_service, session, state_delta: dict):
+    """Update session state from outside an agent using ADK's append_event.
+
+    Direct mutation (session.state["x"] = v) does NOT persist to the session
+    service. This function uses append_event with a state_delta, which IS
+    the proper ADK mechanism for external state updates.
+
+    Args:
+        session_service: The ADK session service instance
+        session: The current Session object
+        state_delta: Dict of key-value pairs to set in session state
+
+    Example:
+        await update_session_state(runner.session_service, session, {
+            "news_result": "TCS news analysis...",
+            "fundamental_result": "P/E: 24, ROE: 40%",
+        })
+    """
+    event = Event(
+        invocation_id=session.id,
+        author="executor",
+        actions=EventActions(state_delta=state_delta),
+    )
+    await session_service.append_event(session, event)
+    logger.info(f"State updated via append_event: keys={list(state_delta.keys())}")
 
 
 class AgentExecutor:
@@ -30,12 +58,18 @@ class AgentExecutor:
         
         We avoid this by creating each (mode, frozenset(agent_names)) combination
         exactly once and reusing it for all subsequent requests.
+
+        IMPORTANT: All runners use the same app_name ("tradexia_executor") so that
+        parallel and sequential executions share the same session namespace.
+        This allows session.state written by news/fundamental agents to be read
+        by synthesis when it runs in a subsequent call.
         """
         # Use a stable cache key: mode + sorted agent names
         cache_key = f"{mode}::{':'.join(sorted(agent_names))}"
         
         if cache_key not in self._wrapper_agents:
-            app_name = f"tradexia_{mode}_executor"
+            # All runners share the same app_name so sessions are in the same namespace
+            app_name = "tradexia_executor"
             logger.info(f"Creating new {mode} wrapper agent for key: {cache_key}")
             
             if mode == "parallel":

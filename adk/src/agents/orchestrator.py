@@ -16,8 +16,17 @@ from .synthesis_agent import synthesis_llm_agent
 from .fundamental_agent import fundamental_llm_agent
 from .index_agent import index_llm_agent
 
+import uuid
+import threading
+
 # Thread pool for async execution in sync context
 _thread_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="agent-executor")
+
+# Thread-local storage: holds the shared session_id for a single orchestrator turn.
+# When the orchestrator LLM calls call_agents_parallel then call_agents_sequential
+# within the same user turn, both calls get the SAME session_id so they share
+# session.state (news_result, fundamental_result, etc.).
+_session_context = threading.local()
 
 # Register all available agents
 registry = get_agent_registry()
@@ -28,14 +37,34 @@ registry.register("synthesis", synthesis_llm_agent)
 logger.info(f"Registered agents: {registry.list_agents()}")
 
 
+def _get_or_create_turn_session_id() -> str:
+    """Return the session_id for the current orchestrator turn.
+    
+    Creates a new one if this is the start of a new turn.
+    The same session_id is reused within a single thread's execution,
+    ensuring parallel and sequential calls share the same session.
+    """
+    if not getattr(_session_context, 'session_id', None):
+        _session_context.session_id = str(uuid.uuid4())
+        logger.info(f"New orchestrator turn session: {_session_context.session_id}")
+    return _session_context.session_id
+
+
+def reset_turn_session_id():
+    """Reset the session_id after a turn completes (called by analyze())."""
+    _session_context.session_id = None
+
+
 def call_agents_parallel(agent_names: List[str], query: str) -> str:
     """Call multiple agents in parallel for independent analyses.
     
     Use this when agents can work independently without waiting for each other.
-    Example: News + Fundamental + Index analysis can all run simultaneously.
+    Example: News + Fundamental analysis can run simultaneously.
+    Their outputs are saved into session state (news_result, fundamental_result)
+    so that a subsequent call_agents_sequential(["synthesis"]) can access them.
     
     Args:
-        agent_names: List of agent names to call (e.g., ["news", "fundamental", "index"])
+        agent_names: List of agent names to call (e.g., ["news", "fundamental"])
         query: The analysis query to pass to all agents
         
     Returns:
@@ -45,8 +74,9 @@ def call_agents_parallel(agent_names: List[str], query: str) -> str:
         logger.info(f"Calling agents in parallel: {agent_names} with query: {query}")
         
         executor = get_agent_executor()
+        # Reuse the same session_id within this orchestrator turn
+        session_id = _get_or_create_turn_session_id()
         
-        # Run async execution in thread pool to avoid event loop conflicts
         def run_async_in_thread():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -55,14 +85,15 @@ def call_agents_parallel(agent_names: List[str], query: str) -> str:
                     executor.execute_agents(
                         agent_names=agent_names,
                         query=query,
-                        mode="parallel"
+                        mode="parallel",
+                        session_id=session_id,
                     )
                 )
             finally:
                 loop.close()
         
         future = _thread_pool.submit(run_async_in_thread)
-        results = future.result(timeout=60)
+        results = future.result(timeout=120)
         
         if "error" in results:
             return f"Error: {results['error']}"
@@ -77,11 +108,11 @@ def call_agents_parallel(agent_names: List[str], query: str) -> str:
 def call_agents_sequential(agent_names: List[str], query: str) -> str:
     """Call multiple agents sequentially when one depends on another's output.
     
-    Use this when later agents need results from earlier agents.
-    Example: First run analysis agents, then synthesis agent uses their results.
+    Use this AFTER call_agents_parallel so that agents like synthesis can
+    read session state written by parallel agents (news_result, fundamental_result).
     
     Args:
-        agent_names: List of agent names in execution order (e.g., ["news", "synthesis"])
+        agent_names: List of agent names in execution order (e.g., ["synthesis"])
         query: The analysis query to pass to agents
         
     Returns:
@@ -91,8 +122,9 @@ def call_agents_sequential(agent_names: List[str], query: str) -> str:
         logger.info(f"Calling agents sequentially: {agent_names} with query: {query}")
         
         executor = get_agent_executor()
+        # Reuse the SAME session_id from the parallel call so session state is shared
+        session_id = _get_or_create_turn_session_id()
         
-        # Run async execution in thread pool to avoid event loop conflicts
         def run_async_in_thread():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -101,14 +133,15 @@ def call_agents_sequential(agent_names: List[str], query: str) -> str:
                     executor.execute_agents(
                         agent_names=agent_names,
                         query=query,
-                        mode="sequential"
+                        mode="sequential",
+                        session_id=session_id,
                     )
                 )
             finally:
                 loop.close()
         
         future = _thread_pool.submit(run_async_in_thread)
-        results = future.result(timeout=60)
+        results = future.result(timeout=120)
         
         if "error" in results:
             return f"Error: {results['error']}"
@@ -202,9 +235,12 @@ class OrchestratorAgent:
         try:
             logger.info(f"Analyzing query: {query}")
             
+            # Reset the shared turn session so each new user message
+            # gets a fresh session_id for parallel/sequential tool calls.
+            reset_turn_session_id()
+            
             # Get or create session
             if not session_id:
-                import uuid
                 session_id = str(uuid.uuid4())
             
             session = await self.runner.session_service.get_session(
@@ -242,6 +278,9 @@ class OrchestratorAgent:
         except Exception as e:
             logger.error(f"Analysis error: {e}", exc_info=True)
             return f"Error: {str(e)}"
+        finally:
+            # Always reset so the next user message starts a fresh shared session
+            reset_turn_session_id()
 
 
 # Global instance

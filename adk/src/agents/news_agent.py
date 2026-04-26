@@ -1,6 +1,7 @@
 """News Intelligence Agent - Analyzes news and sentiment for stocks/indices."""
 from google.adk.agents import LlmAgent
-from typing import Dict, Any, List
+from google.adk.agents.callback_context import CallbackContext
+from typing import Dict, Any, List, Optional
 import feedparser
 import httpx
 from datetime import datetime
@@ -146,16 +147,34 @@ def analyze_sentiment(symbol: str) -> Dict[str, Any]:
         return {"error": str(e)}
 
 
+# ── Parallel-execution verification callback ───────────────────────────────────
+def _news_before_callback(callback_context: CallbackContext) -> Optional[object]:
+    """Logs start time + thread ID so we can verify parallel execution.
+
+    In a ParallelAgent, news and fundamental agents should:
+      - start at nearly the same wall-clock time  (within ~100ms)
+      - run on DIFFERENT threads (different thread IDs)
+
+    If both thread IDs are the same, ADK is running them sequentially.
+    """
+    now = datetime.now()
+    thread_id = threading.get_ident()
+    logger.info(
+        f"\u250c [PARALLEL CHECK] news_intelligence_agent STARTED"
+        f" | time={now.strftime('%H:%M:%S.%f')[:-3]}"
+        f" | thread_id={thread_id}"
+    )
+    return None 
+
+
 # Create the News LlmAgent
-# When used as AgentTool, it AUTOMATICALLY inherits:
-# - Session state from parent (orchestrator)
-# - Memory from parent
-# - Artifacts from parent
-# All changes made by this agent are forwarded back to the parent's context
 news_llm_agent = LlmAgent(
     model='gemini-2.5-flash-lite',
     name='news_intelligence_agent',
     description='Analyzes news and sentiment for stocks and indices using RSS feeds',
+    # output_key tells ADK to automatically save this agent's final response
+    # into session.state["news_result"] so other agents can read it.
+    output_key='news_result',
     instruction="""You are a financial news analysis expert specializing in Indian stock markets.
     
     Your responsibilities:
