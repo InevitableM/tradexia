@@ -154,23 +154,6 @@ def get_screener_data(symbol: str) -> Dict[str, Any]:
         logger.error(f"Error scraping screener data for {symbol}: {e}")
         return {"error": f"Failed to fetch data for {symbol}: {str(e)}"}
 
-# ── Parallel-execution verification callback ─────────────────────────────────
-def _fundamental_before_callback(callback_context: CallbackContext) -> Optional[object]:
-    """Logs start time + thread ID so we can verify parallel execution.
-
-    Compare with the news_agent log line:
-      - Same time + same thread  → sequential (bad)
-      - Same time + diff thread  → true parallel (good)
-    """
-    now = datetime.now()
-    thread_id = threading.get_ident()
-    logger.info(
-        f"┌ [PARALLEL CHECK] fundamental_analysis_agent STARTED"
-        f" | time={now.strftime('%H:%M:%S.%f')[:-3]}"
-        f" | thread_id={thread_id}"
-    )
-    return None  # None = let the agent run normally
-
 
 # Create Fundamental LlmAgent
 fundamental_llm_agent = LlmAgent(

@@ -147,25 +147,6 @@ def analyze_sentiment(symbol: str) -> Dict[str, Any]:
         return {"error": str(e)}
 
 
-# ── Parallel-execution verification callback ───────────────────────────────────
-def _news_before_callback(callback_context: CallbackContext) -> Optional[object]:
-    """Logs start time + thread ID so we can verify parallel execution.
-
-    In a ParallelAgent, news and fundamental agents should:
-      - start at nearly the same wall-clock time  (within ~100ms)
-      - run on DIFFERENT threads (different thread IDs)
-
-    If both thread IDs are the same, ADK is running them sequentially.
-    """
-    now = datetime.now()
-    thread_id = threading.get_ident()
-    logger.info(
-        f"\u250c [PARALLEL CHECK] news_intelligence_agent STARTED"
-        f" | time={now.strftime('%H:%M:%S.%f')[:-3]}"
-        f" | thread_id={thread_id}"
-    )
-    return None 
-
 
 # Create the News LlmAgent
 news_llm_agent = LlmAgent(
