@@ -1,89 +1,10 @@
 """Fundamental Analysis Agent - Evaluates financial metrics and company fundamentals."""
 from google.adk.agents import LlmAgent
-from google.adk.agents.callback_context import CallbackContext
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from loguru import logger
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
-from datetime import datetime
-import threading
-from ..tools.backend_client import get_backend_client
-from ..cache import get_cache_client
-
-
-
-def get_financial_metrics(symbol: str) -> Dict[str, Any]:
-    """Retrieves key financial metrics for a stock.
-    
-    Args:
-        symbol: Stock symbol (e.g., 'RELIANCE', 'TCS')
-        
-    Returns:
-        Dict containing P/E ratio, market cap, revenue, profit, etc.
-    """
-    try:
-        cache = get_cache_client()
-        
-        # Try cache first
-        cached_data = cache.get_stock_data(symbol)
-        if cached_data:
-            logger.info(f"Financial metrics for {symbol} found in cache")
-            return cached_data
-        
-        # Placeholder for backend call
-        return {
-            "symbol": symbol,
-            "message": "Backend integration pending",
-            "metrics": {}
-        }
-    except Exception as e:
-        logger.error(f"Error fetching metrics for {symbol}: {e}")
-        return {"error": str(e)}
-
-
-def analyze_growth_trends(symbol: str) -> Dict[str, Any]:
-    """Analyzes sales growth, profit trends, and future projections.
-    
-    Args:
-        symbol: Stock symbol
-        
-    Returns:
-        Growth analysis including historical trends and projections
-    """
-    try:
-        return {
-            "symbol": symbol,
-            "revenue_growth": None,
-            "profit_growth": None,
-            "projections": {},
-            "message": "Backend integration pending"
-        }
-    except Exception as e:
-        logger.error(f"Error analyzing growth for {symbol}: {e}")
-        return {"error": str(e)}
-
-
-def evaluate_company_plans(symbol: str) -> Dict[str, Any]:
-    """Evaluates company's future plans, expansions, and strategic initiatives.
-    
-    Args:
-        symbol: Stock symbol
-        
-    Returns:
-        Analysis of company's strategic plans and initiatives
-    """
-    try:
-        return {
-            "symbol": symbol,
-            "future_plans": [],
-            "expansions": [],
-            "strategic_initiatives": [],
-            "message": "Backend integration pending"
-        }
-    except Exception as e:
-        logger.error(f"Error evaluating plans for {symbol}: {e}")
-        return {"error": str(e)}
 
 
 def get_screener_data(symbol: str) -> Dict[str, Any]:
@@ -148,6 +69,8 @@ def get_screener_data(symbol: str) -> Dict[str, Any]:
         data["profit_loss"] = parse_table("profit-loss")
         data["balance_sheet"] = parse_table("balance-sheet")
         data["cash_flow"] = parse_table("cash-flow")
+        data["shareholding"]= parse_table("shareholding")
+        print(f"Scraped data for {symbol}: {data['shareholding']}")
 
         return data
     except Exception as e:
@@ -164,19 +87,29 @@ fundamental_llm_agent = LlmAgent(
     # into session.state["fundamental_result"] so other agents can read it.
     output_key='fundamental_result',
     instruction="""You are a fundamental analysis expert for Indian stock markets.
-    
-    Your responsibilities:
-    1. Analyze key financial metrics (P/E, P/B, ROE, debt ratios, etc.)
-    2. Evaluate sales growth and profit trends
-    3. Assess company's future plans and strategic initiatives
-    4. Compare fundamentals across companies and sectors
-    5. Identify value opportunities and red flags
-    
-    Use the available tools to fetch financial data and analyze fundamentals.
-    Provide comprehensive analysis with proper valuation context.
-    Always consider both quantitative metrics and qualitative factors.
+
+    When asked to analyze a stock, call get_screener_data(symbol) to retrieve all available
+    financial data in one call. The tool returns:
+      - key_metrics   : valuation ratios (P/E, P/B, ROE, EPS, market cap, dividend yield, etc.)
+      - quarterly      : recent quarterly revenue, profit, and margin data
+      - profit_loss    : multi-year P&L statement (sales, expenses, net profit, OPM)
+      - balance_sheet  : assets, liabilities, equity, and debt breakdown
+      - cash_flow      : operating, investing, and financing cash flows
+      - shareholding   : promoter, FII, DII, and public holding patterns
+
+    Using that data, deliver a structured analysis covering:
+    1. Valuation — is the stock cheap, fairly valued, or expensive vs. peers and history?
+    2. Profitability & margins — OPM, NPM, ROE, ROCE trends over time.
+    3. Growth — revenue and profit CAGR; acceleration or deceleration signals.
+    4. Financial health — debt-to-equity, interest coverage, current ratio.
+    5. Cash flow quality — whether reported profits are backed by real cash generation.
+    6. Shareholding trends — promoter pledge/increase, institutional interest.
+    7. Red flags & strengths — call out anything that stands out positively or negatively.
+    8. Overall verdict — a concise buy / hold / avoid recommendation with key reasons.
+
+    Be precise with numbers. Reference specific figures from the data rather than speaking in generalities.
     """,
-    tools=[get_financial_metrics, analyze_growth_trends, evaluate_company_plans, get_screener_data],
+    tools=[get_screener_data],
 )
 
 logger.info("Fundamental Analysis Agent initialized")

@@ -1,4 +1,5 @@
 """Orchestrator Agent - Routes queries using dynamic multi-agent execution."""
+
 from google.adk.agents import LlmAgent
 from google.genai import types
 from typing import Optional, List
@@ -39,12 +40,12 @@ logger.info(f"Registered agents: {registry.list_agents()}")
 
 def _get_or_create_turn_session_id() -> str:
     """Return the session_id for the current orchestrator turn.
-    
+
     Creates a new one if this is the start of a new turn.
     The same session_id is reused within a single thread's execution,
     ensuring parallel and sequential calls share the same session.
     """
-    if not getattr(_session_context, 'session_id', None):
+    if not getattr(_session_context, "session_id", None):
         _session_context.session_id = str(uuid.uuid4())
         logger.info(f"New orchestrator turn session: {_session_context.session_id}")
     return _session_context.session_id
@@ -57,26 +58,26 @@ def reset_turn_session_id():
 
 def call_agents_parallel(agent_names: List[str], query: str) -> str:
     """Call multiple agents in parallel for independent analyses.
-    
+
     Use this when agents can work independently without waiting for each other.
     Example: News + Fundamental analysis can run simultaneously.
     Their outputs are saved into session state (news_result, fundamental_result)
     so that a subsequent call_agents_sequential(["synthesis"]) can access them.
-    
+
     Args:
         agent_names: List of agent names to call (e.g., ["news", "fundamental"])
         query: The analysis query to pass to all agents
-        
+
     Returns:
         Combined results from all agents
     """
     try:
         logger.info(f"Calling agents in parallel: {agent_names} with query: {query}")
-        
+
         executor = get_agent_executor()
         # Reuse the same session_id within this orchestrator turn
         session_id = _get_or_create_turn_session_id()
-        
+
         def run_async_in_thread():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -91,15 +92,15 @@ def call_agents_parallel(agent_names: List[str], query: str) -> str:
                 )
             finally:
                 loop.close()
-        
+
         future = _thread_pool.submit(run_async_in_thread)
         results = future.result(timeout=120)
-        
+
         if "error" in results:
             return f"Error: {results['error']}"
-        
+
         return results.get("response", "No response from agents")
-        
+
     except Exception as e:
         logger.error(f"Error in parallel agent execution: {e}", exc_info=True)
         return f"Error calling agents: {str(e)}"
@@ -107,24 +108,24 @@ def call_agents_parallel(agent_names: List[str], query: str) -> str:
 
 def call_agents_sequential(agent_names: List[str], query: str) -> str:
     """Call multiple agents sequentially when one depends on another's output.
-    
+
     Use this AFTER call_agents_parallel so that agents like synthesis can
     read session state written by parallel agents (news_result, fundamental_result).
-    
+
     Args:
         agent_names: List of agent names in execution order (e.g., ["synthesis"])
         query: The analysis query to pass to agents
-        
+
     Returns:
         Results from sequential execution
     """
     try:
         logger.info(f"Calling agents sequentially: {agent_names} with query: {query}")
-        
+
         executor = get_agent_executor()
         # Reuse the SAME session_id from the parallel call so session state is shared
         session_id = _get_or_create_turn_session_id()
-        
+
         def run_async_in_thread():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -139,15 +140,15 @@ def call_agents_sequential(agent_names: List[str], query: str) -> str:
                 )
             finally:
                 loop.close()
-        
+
         future = _thread_pool.submit(run_async_in_thread)
         results = future.result(timeout=120)
-        
+
         if "error" in results:
             return f"Error: {results['error']}"
-        
+
         return results.get("response", "No response from agents")
-        
+
     except Exception as e:
         logger.error(f"Error in sequential agent execution: {e}", exc_info=True)
         return f"Error calling agents: {str(e)}"
@@ -155,9 +156,9 @@ def call_agents_sequential(agent_names: List[str], query: str) -> str:
 
 # Create Orchestrator LlmAgent with dynamic agent calling tools
 orchestrator_llm_agent = LlmAgent(
-    model='gemini-2.5-flash',
-    name='orchestrator_agent',
-    description='Main orchestrator for multi-agent stock analysis system with dynamic parallel/sequential execution',
+    model="gemini-2.5-flash",
+    name="orchestrator_agent",
+    description="Main orchestrator for multi-agent stock analysis system with dynamic parallel/sequential execution",
     instruction="""You are the master orchestrator for a multi-agent financial analysis system.
 
 Your role:
@@ -198,23 +199,22 @@ logger.info("Orchestrator Agent initialized with dynamic parallel/sequential exe
 
 class OrchestratorAgent:
     """Main orchestrator using dynamic multi-agent execution."""
-    
+
     def __init__(self):
         """Initialize orchestrator with main runner."""
         self.cache = get_cache_client()
         self.backend = get_backend_client()
-        
+
         # Use the shared main runner
         main_runner = get_main_runner()
-        
+
         # Create runner for orchestrator using shared services
         self.runner = main_runner.create_runner(
-            agent=orchestrator_llm_agent,
-            app_name='tradexia_orchestrator'
+            agent=orchestrator_llm_agent, app_name="tradexia_orchestrator"
         )
-        
+
         logger.info("Orchestrator Agent initialized with dynamic multi-agent execution")
-    
+
     def health_check(self) -> dict:
         """Health check for all components."""
         return {
@@ -223,64 +223,8 @@ class OrchestratorAgent:
             "framework": "Google ADK",
             "registered_agents": registry.list_agents(),
             "execution_modes": ["parallel", "sequential"],
-            "pattern": "Dynamic Multi-Agent Execution"
+            "pattern": "Dynamic Multi-Agent Execution",
         }
-    
-    async def analyze(self, query: str, user_id: str = "default_user", session_id: Optional[str] = None) -> str:
-        """Analyze a query using the orchestrator.
-        
-        The orchestrator LLM will automatically call sub-agents (via AgentTools) 
-        when needed based on the query.
-        """
-        try:
-            logger.info(f"Analyzing query: {query}")
-            
-            # Reset the shared turn session so each new user message
-            # gets a fresh session_id for parallel/sequential tool calls.
-            reset_turn_session_id()
-            
-            # Get or create session
-            if not session_id:
-                session_id = str(uuid.uuid4())
-            
-            session = await self.runner.session_service.get_session(
-                app_name=self.runner.app_name,
-                user_id=user_id,
-                session_id=session_id,
-            )
-            
-            if not session:
-                session = await self.runner.session_service.create_session(
-                    app_name=self.runner.app_name,
-                    user_id=user_id,
-                    session_id=session_id,
-                )
-            
-            # Create message content
-            content = types.Content(role='user', parts=[types.Part(text=query)])
-            
-            # Run agent - ADK automatically handles sub-agent calls via AgentTools
-            response_text = ""
-            async for event in self.runner.run_async(
-                session_id=session.id,
-                user_id=user_id,
-                new_message=content
-            ):
-                if event.is_final_response() and event.content and event.content.parts:
-                    response_text = "".join(
-                        part.text for part in event.content.parts 
-                        if hasattr(part, 'text') and part.text
-                    )
-                    break
-            
-            return response_text if response_text else "No response generated"
-            
-        except Exception as e:
-            logger.error(f"Analysis error: {e}", exc_info=True)
-            return f"Error: {str(e)}"
-        finally:
-            # Always reset so the next user message starts a fresh shared session
-            reset_turn_session_id()
 
 
 # Global instance
