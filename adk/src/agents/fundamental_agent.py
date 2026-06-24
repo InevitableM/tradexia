@@ -5,24 +5,42 @@ from loguru import logger
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
+from ..cache import get_cache_client
+
+# TTL for screener data: 1 hour (financial statements don't change intraday)
+_SCREENER_TTL = 3600
 
 
 def get_screener_data(symbol: str) -> Dict[str, Any]:
     """Scrapes comprehensive fundamental data for an Indian stock from Screener.in.
-    
-    Includes key ratios, quarterly results, profit & loss statements, 
+
+    Results are cached in Redis for 1 hour so repeated queries for the same
+    symbol skip the scrape entirely.
+
+    Includes key ratios, quarterly results, profit & loss statements,
     balance sheets, and cash flow data.
-    
+
     Args:
         symbol: Stock symbol (e.g., 'TCS', 'RELIANCE')
-        
+
     Returns:
         Dict containing key metrics and financial tables
     """
+    # --- cache read ---
+    try:
+        cache = get_cache_client()
+        cached = cache.get(f"screener:{symbol}")
+        if cached:
+            logger.info(f"Screener data for {symbol} served from cache")
+            return cached
+    except Exception as e:
+        logger.warning(f"Cache read failed, falling back to scrape: {e}")
+
+    # --- scrape ---
     try:
         url = f"https://www.screener.in/company/{symbol}/"
         headers = {"User-Agent": "Mozilla/5.0"}
-        
+
         logger.info(f"Scraping screener data for {symbol}")
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
@@ -30,19 +48,16 @@ def get_screener_data(symbol: str) -> Dict[str, Any]:
         soup = BeautifulSoup(response.text, "html.parser")
         data = {}
 
-        # 1. TOP RATIOS (Key Metrics)
+        # Top ratios (key metrics)
         ratios = soup.select("ul#top-ratios li")
         key_metrics = {}
         for item in ratios:
             name = item.select_one("span.name")
             value = item.select_one("span.number")
             if name and value:
-                key = name.text.strip()
-                val = value.text.strip()
-                key_metrics[key] = val
+                key_metrics[name.text.strip()] = value.text.strip()
         data["key_metrics"] = key_metrics
 
-        # 2. TABLE PARSER
         def parse_table(section_id):
             section = soup.find("section", {"id": section_id})
             if not section:
@@ -50,29 +65,31 @@ def get_screener_data(symbol: str) -> Dict[str, Any]:
             table = section.find("table")
             if not table:
                 return None
-            
             headers = [th.text.strip() for th in table.find_all("th")]
             rows = []
             for tr in table.find_all("tr")[1:]:
                 cols = [td.text.strip() for td in tr.find_all(["td", "th"])]
                 if len(cols) == len(headers):
                     rows.append(cols)
-            
-            # Convert to list of dicts for LLM readability
             if rows:
-                df = pd.DataFrame(rows, columns=headers)
-                return df.to_dict(orient='records')
+                return pd.DataFrame(rows, columns=headers).to_dict(orient="records")
             return None
 
-        # 3. FINANCIAL TABLES
         data["quarterly"] = parse_table("quarters")
         data["profit_loss"] = parse_table("profit-loss")
         data["balance_sheet"] = parse_table("balance-sheet")
         data["cash_flow"] = parse_table("cash-flow")
-        data["shareholding"]= parse_table("shareholding")
-        print(f"Scraped data for {symbol}: {data['shareholding']}")
+        data["shareholding"] = parse_table("shareholding")
+
+        # --- cache write ---
+        try:
+            cache.set_screener_data(symbol, data, ttl=_SCREENER_TTL)
+            logger.info(f"Screener data for {symbol} cached for {_SCREENER_TTL}s")
+        except Exception as e:
+            logger.warning(f"Cache write failed (data still returned): {e}")
 
         return data
+
     except Exception as e:
         logger.error(f"Error scraping screener data for {symbol}: {e}")
         return {"error": f"Failed to fetch data for {symbol}: {str(e)}"}
