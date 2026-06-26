@@ -1,5 +1,6 @@
 """News Intelligence Agent - Analyzes news and sentiment for stocks/indices."""
 from google.adk.agents import LlmAgent
+from google.adk.agents.callback_context import CallbackContext
 from typing import Dict, Any, List
 import feedparser
 import httpx
@@ -68,12 +69,23 @@ def get_stock_news(symbol: str) -> Dict[str, Any]:
         return {"symbol": symbol, "error": str(e)}
 
 
+def _news_after_agent_callback(callback_context: CallbackContext):
+    """Log confirmation that output_key has written news_result to session state."""
+    news_result = callback_context.state.get("news_result")
+    if news_result:
+        logger.info(f"[news_after_agent_callback] news_result in state ({len(str(news_result))} chars)")
+    else:
+        logger.warning("[news_after_agent_callback] news_result not found in state after agent run")
+    return None
+
+
 # Create the News LlmAgent
 news_llm_agent = LlmAgent(
     model="gemini-2.5-flash-lite",
     name="news_intelligence_agent",
     description="Analyzes news and sentiment for stocks and indices using RSS feeds",
     output_key="news_result",
+    after_agent_callback=_news_after_agent_callback,
     instruction="""You are a financial news analysis expert specializing in Indian stock markets.
 
     When asked about a stock, call get_stock_news(symbol) to fetch the latest articles.

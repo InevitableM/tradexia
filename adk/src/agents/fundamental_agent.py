@@ -1,5 +1,6 @@
 """Fundamental Analysis Agent - Evaluates financial metrics and company fundamentals."""
 from google.adk.agents import LlmAgent
+from google.adk.agents.callback_context import CallbackContext
 from typing import Dict, Any
 from loguru import logger
 import requests
@@ -95,14 +96,23 @@ def get_screener_data(symbol: str) -> Dict[str, Any]:
         return {"error": f"Failed to fetch data for {symbol}: {str(e)}"}
 
 
+def _fundamental_after_agent_callback(callback_context: CallbackContext):
+    """Log confirmation that output_key has written fundamental_result to session state."""
+    fundamental_result = callback_context.state.get("fundamental_result")
+    if fundamental_result:
+        logger.info(f"[fundamental_after_agent_callback] fundamental_result in state ({len(str(fundamental_result))} chars)")
+    else:
+        logger.warning("[fundamental_after_agent_callback] fundamental_result not found in state after agent run")
+    return None
+
+
 # Create Fundamental LlmAgent
 fundamental_llm_agent = LlmAgent(
     model='gemini-2.5-flash',
     name='fundamental_analysis_agent',
     description='Analyzes company fundamentals and financial health',
-    # output_key tells ADK to automatically save this agent's final response
-    # into session.state["fundamental_result"] so other agents can read it.
     output_key='fundamental_result',
+    after_agent_callback=_fundamental_after_agent_callback,
     instruction="""You are a fundamental analysis expert for Indian stock markets.
 
     When asked to analyze a stock, call get_screener_data(symbol) to retrieve all available

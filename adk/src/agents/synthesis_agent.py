@@ -1,6 +1,8 @@
 """Synthesis Agent - Combines insights from all specialized agents."""
 from google.adk.agents import LlmAgent
+from google.adk.agents.callback_context import CallbackContext
 from google.adk.tools.tool_context import ToolContext
+from google.genai import types
 from typing import Dict, Any
 from loguru import logger
 
@@ -55,15 +57,36 @@ def generate_report(symbol: str, tool_context: ToolContext) -> str:
         return f"Error: {str(e)}"
 
 
+def _synthesis_before_agent_callback(
+    callback_context: CallbackContext,
+):
+    """Guard: short-circuit synthesis if news_result or fundamental_result are missing."""
+    missing = [
+        key for key in ("news_result", "fundamental_result")
+        if not callback_context.state.get(key)
+    ]
+    result = callback_context.state.get("fundamental_result")
+    print(f"[synthesis_before_agent_callback] fundamental_result length: {len(result) if result else 0}")
+    if missing:
+        logger.warning(f"[synthesis_before_agent_callback] Missing state keys: {missing} — aborting synthesis")
+        return types.Content(
+            role="model",
+            parts=[types.Part(text=f"Cannot synthesize: missing data for {', '.join(missing)}. Run news and fundamental agents first.")],
+        )
+    logger.info("[synthesis_before_agent_callback] news_result and fundamental_result present — proceeding")
+    return None
+
+
 # Create Synthesis LlmAgent
 synthesis_llm_agent = LlmAgent(
     model='gemini-2.5-flash',
     name='synthesis_agent',
     description='Synthesizes multi-agent insights into comprehensive analysis',
+    before_agent_callback=_synthesis_before_agent_callback,
     instruction="""You are a senior market analyst who synthesizes insights from multiple sources.
     
     Your responsibilities:
-    1. Combine insights from news, fundamentals, and index analysis
+    1. Combine insights from news, fundamentals analysis
     2. Identify correlations and contradictions across data sources
     3. Generate comprehensive, actionable recommendations
     4. Highlight key risks and opportunities

@@ -158,40 +158,52 @@ class AgentExecutor:
                     session_id=session_id,
                 )
             
-            # Store query in session state for agents to access
-            session.state["query"] = query
-            session.state["agent_names"] = agent_names
-            
             # Create message content
             content = types.Content(role='user', parts=[types.Part(text=query)])
             
             # Execute agents
             logger.info(f"Running {mode} executor for query: {query}")
             results = {}
-            
+            event_count = 0
+
             async for event in runner.run_async(
                 session_id=session.id,
                 user_id=user_id,
                 new_message=content
             ):
+                event_count += 1
+                logger.debug(
+                    f"Event #{event_count} | author={getattr(event, 'author', '?')} "
+                    f"is_final={event.is_final_response()} "
+                    f"has_content={event.content is not None}"
+                )
                 # Collect results from events
                 if event.is_final_response() and event.content and event.content.parts:
                     response_text = "".join(
-                        part.text for part in event.content.parts 
+                        part.text for part in event.content.parts
                         if hasattr(part, 'text') and part.text
                     )
                     results["response"] = response_text
-            
+                    logger.debug(f"Final response captured: {len(response_text)} chars")
+
+            logger.info(f"Stream complete: {event_count} total events | agents={agent_names} state_keys={list(session.state.keys())}")
+
             # Also collect any state written by agents
             results["state"] = dict(session.state)
             results["mode"] = mode
             results["agents_executed"] = agent_names
-            
+
             logger.info(f"{mode.capitalize()} execution completed for {len(agent_names)} agents", results)
             return results
-            
+
         except Exception as e:
-            logger.error(f"Error executing agents in {mode} mode: {e}", exc_info=True)
+            import traceback
+            logger.error(
+                f"Error executing agents in {mode} mode | agents={agent_names} session_id={session_id}\n"
+                f"Type : {type(e).__name__}\n"
+                f"Error: {e}\n"
+                f"{traceback.format_exc()}"
+            )
             return {"error": str(e)}
 
 
