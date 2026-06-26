@@ -45,10 +45,6 @@ class CacheClient:
         """Get cached stock data."""
         return self.get(f"stock:{symbol}")
 
-    def set_screener_data(self, symbol: str, data: dict, ttl: int = 3600) -> bool:
-        """Cache screener.in fundamental data for a symbol."""
-        return self.set(f"screener:{symbol}", data, ttl)
-    
     def get_news(self, symbol: str, limit: int = 10) -> Optional[list]:
         """Get cached news for a symbol."""
         return self.get(f"news:{symbol}:{limit}")

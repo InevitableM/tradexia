@@ -56,6 +56,11 @@ def get_stock_news(symbol: str) -> Dict[str, Any]:
 
         articles = _fetch_rss_news(symbol, limit)
         if articles:
+            try:
+                cache.set(f"news:{symbol}:{limit}", articles, ttl=900)
+                logger.info(f"News for {symbol} cached for 900s")
+            except Exception as cache_error:
+                logger.warning(f"Cache write failed: {cache_error}")
             return {
                 "symbol": symbol,
                 "news": articles,

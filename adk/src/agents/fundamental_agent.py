@@ -84,7 +84,7 @@ def get_screener_data(symbol: str) -> Dict[str, Any]:
 
         # --- cache write ---
         try:
-            cache.set_screener_data(symbol, data, ttl=_SCREENER_TTL)
+            cache.set(f"screener:{symbol}", data, ttl=_SCREENER_TTL)
             logger.info(f"Screener data for {symbol} cached for {_SCREENER_TTL}s")
         except Exception as e:
             logger.warning(f"Cache write failed (data still returned): {e}")
