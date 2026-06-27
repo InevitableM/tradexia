@@ -11,11 +11,10 @@ from ..cache import get_cache_client
 from ..tools.backend_client import get_backend_client
 from ..core import get_agent_registry, get_agent_executor, get_main_runner
 
-# Import sub-agent LlmAgent instances
-from .news_agent import news_llm_agent
-from .synthesis_agent import synthesis_llm_agent
-from .fundamental_agent import fundamental_llm_agent
-from .index_agent import index_llm_agent
+# Import sub-agent factory functions
+from .news_agent import make_news_agent
+from .synthesis_agent import make_synthesis_agent
+from .fundamental_agent import make_fundamental_agent
 
 import uuid
 import threading
@@ -29,11 +28,11 @@ _thread_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="agent-execu
 # session.state (news_result, fundamental_result, etc.).
 _session_context = threading.local()
 
-# Register all available agents
+# Register agent factories (not instances)
 registry = get_agent_registry()
-registry.register("news", news_llm_agent)
-registry.register("fundamental", fundamental_llm_agent)
-registry.register("synthesis", synthesis_llm_agent)
+registry.register("news", make_news_agent)
+registry.register("fundamental", make_fundamental_agent)
+registry.register("synthesis", make_synthesis_agent)
 
 logger.info(f"Registered agents: {registry.list_agents()}")
 
@@ -158,7 +157,7 @@ def call_agents_sequential(agent_names: List[str], query: str) -> str:
 orchestrator_llm_agent = LlmAgent(
     model="gemini-2.5-flash",
     name="orchestrator_agent",
-    description="Main orchestrator for multi-agent stock analysis system with dynamic parallel/sequential execution",
+    description="Main orchestrator for multi-agent stock and index analysis system with dynamic parallel/sequential execution",
     instruction="""You are the master orchestrator for a multi-agent financial analysis system.
 
 Your role:

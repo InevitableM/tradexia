@@ -203,8 +203,6 @@ User: "Analyze TCS"
 
 2. **Session reuse** — The same `session_id` (provided by the orchestrator's thread-local) is passed to every `execute_agents()` call within a single user turn, so state written by parallel agents is visible to sequential agents.
 
-3. **State injection** — `update_session_state()` appends a synthetic event to the ADK session to seed state from outside the agent graph.
-
 ### Registry (`core/registry.py`)
 
 Flat key→agent dict. Agents register themselves at module import time. The executor calls `get_multiple(agent_names)` to resolve names before building wrapper agents.
