@@ -2,8 +2,6 @@
 
 from typing import List, Dict, Any, Optional
 from google.genai import types
-from google.adk.events import Event, EventActions
-import asyncio
 from loguru import logger
 from .runner import get_main_runner
 from .agents import create_parallel_agent, create_sequential_agent

@@ -1,12 +1,10 @@
 """Orchestrator Agent - Routes queries using dynamic multi-agent execution."""
 
 from google.adk.agents import LlmAgent
-from google.genai import types
 from typing import Optional, List
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from loguru import logger
-from ..config import get_settings
 from ..cache import get_cache_client
 from ..tools.backend_client import get_backend_client
 from ..core import get_agent_registry, get_agent_executor, get_main_runner
@@ -167,7 +165,7 @@ Your role:
 
 Available Agents:
 - news: News analysis and sentiment for stocks
-- fundamental: Financial metrics, growth analysis, company fundamentals
+- fundamental: Financial metrics, growth analysis, company fundamentals , historical performance and data of stocks and indices
 - synthesis: Synthesis of all analyses
 
 Execution Strategies:
