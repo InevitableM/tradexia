@@ -3,7 +3,6 @@
 from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.tools.tool_context import ToolContext
-from google.genai import types
 from typing import Dict, Any
 from loguru import logger
 
