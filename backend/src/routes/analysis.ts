@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import { authenticate } from "../middleware/auth";
+import { authenticate } from "../middleware/requestHandler";
 import { AuthRequest } from "../types";
 import { runAnalysis } from "../services/adkClient";
 import { cacheGet, cacheSet } from "../services/redis";
