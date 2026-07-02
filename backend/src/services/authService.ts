@@ -111,6 +111,18 @@ export async function refreshTokens(token: string): Promise<RefreshResult> {
   return { accessToken, refreshToken };
 }
 
+// Called by the /refresh route — looks up stored token from Redis, issues new tokens
+export async function refreshByUserId(userId: string): Promise<string> {
+  const stored = await cacheGet<string>(`refresh:${userId}`);
+  if (!stored) throw new Error("Session expired or not found");
+
+  const payload = jwt.verify(stored, getSecret()) as AuthPayload;
+  const { accessToken, refreshToken } = issueTokens(payload.userId, payload.email);
+  await cacheSet(`refresh:${userId}`, refreshToken, REFRESH_TTL);
+
+  return accessToken;
+}
+
 // ---------------------------------------------------------------------------
 
 export async function logout(userId: string): Promise<void> {

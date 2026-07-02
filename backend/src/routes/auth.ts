@@ -9,7 +9,13 @@ router.post("/register", async (req: Request, res: Response) => {
   try {
     const result = await authService.register(req.body);
     console.log(`[route] register success userId=${result.userId}`);
-    res.status(201).json({ success: true, data: result });
+    // refreshToken stays in Redis — never sent to client
+    res.status(201).json({ success: true, data: {
+      userId: result.userId,
+      email: result.email,
+      name: result.name,
+      accessToken: result.accessToken,
+    }});
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Registration failed";
     const status = message === "Email already registered" ? 409 : 400;
@@ -22,7 +28,12 @@ router.post("/register", async (req: Request, res: Response) => {
 router.post("/login", async (req: Request, res: Response) => {
   try {
     const result = await authService.login(req.body);
-    res.json({ success: true, data: result });
+    res.json({ success: true, data: {
+      userId: result.userId,
+      email: result.email,
+      name: result.name,
+      accessToken: result.accessToken,
+    }});
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Login failed";
     const status = message === "Invalid credentials" ? 401 : 400;
@@ -30,23 +41,24 @@ router.post("/login", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/auth/refresh
+// POST /api/auth/refresh  — body: { userId }
+// Looks up the refresh token from Redis, issues new tokens, returns new accessToken only
 router.post("/refresh", async (req: Request, res: Response) => {
   try {
-    const { refreshToken } = req.body as { refreshToken?: string };
-    if (!refreshToken) {
-      res.status(400).json({ success: false, error: "refreshToken is required" });
+    const { userId } = req.body as { userId?: string };
+    if (!userId) {
+      res.status(400).json({ success: false, error: "userId is required" });
       return;
     }
-    const result = await authService.refreshTokens(refreshToken);
-    res.json({ success: true, data: result });
+    const accessToken = await authService.refreshByUserId(userId);
+    res.json({ success: true, data: { accessToken } });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Token refresh failed";
     res.status(401).json({ success: false, error: message });
   }
 });
 
-// POST /api/auth/logout
+// POST /api/auth/logout  — body: { userId }
 router.post("/logout", async (req: Request, res: Response) => {
   try {
     const { userId } = req.body as { userId?: string };

@@ -38,7 +38,6 @@ model Message {
   conversationId String   @db.Uuid
   role           String   @db.VarChar(20)
   content        String
-  symbol         String?  @db.VarChar(50)
   createdAt      DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

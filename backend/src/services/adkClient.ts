@@ -28,9 +28,9 @@ function getAdkClient(): AxiosInstance {
 
 export interface AnalysisRequest {
   query: string;
-  symbol?: string;
-  sessionId?: string;
-  userId?: string;
+  session_id: string;
+  user_id: string;
+  access_token: string;
 }
 
 export interface AnalysisResponse {

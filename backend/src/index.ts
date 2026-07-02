@@ -6,6 +6,7 @@ import rateLimit from "express-rate-limit";
 
 import authRouter from "./routes/auth";
 import analysisRouter from "./routes/analysis";
+import conversationsRouter from "./routes/conversations";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -28,6 +29,7 @@ app.use(
 // Routes
 app.use("/api/auth", authRouter);
 app.use("/api/analysis", analysisRouter);
+app.use("/api/conversations", conversationsRouter);
 
 // 404
 app.use((_req, res) => {

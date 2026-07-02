@@ -1,4 +1,4 @@
-"""Backend API client for making requests to the backend service."""
+"""Backend API client for making requests to the Node backend service."""
 import httpx
 from typing import Optional, Dict, Any
 from loguru import logger
@@ -6,69 +6,91 @@ from ..config import get_settings
 
 
 class BackendClient:
-    """HTTP client for backend API calls."""
-    
+    """HTTP client for Node backend API calls."""
+
     def __init__(self):
-        """Initialize backend client."""
         settings = get_settings()
         self.base_url = settings.backend_api_url
-        self.api_key = settings.backend_api_key
-        self.headers = {
-            "Content-Type": "application/json",
-        }
-        if self.api_key:
-            self.headers["Authorization"] = f"Bearer {self.api_key}"
+
+    def _headers(self, access_token: Optional[str] = None) -> Dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+        return headers
     
+    async def save_conversation(
+        self,
+        session_id: str,
+        user_message: str,
+        assistant_message: str,
+        access_token: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Persist a user+assistant message pair to the Node backend."""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/api/conversations",
+                    json={
+                        "sessionId": session_id,
+                        "userMessage": user_message,
+                        "assistantMessage": assistant_message,
+                    },
+                    headers=self._headers(access_token),
+                    timeout=10.0,
+                )
+                response.raise_for_status()
+                logger.info(f"[backend_client] conversation saved session_id={session_id}")
+                return response.json()
+        except Exception as e:
+            logger.error(f"[backend_client] save_conversation failed: {e}")
+            return None
+
     async def get_stock_data(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Fetch stock data from backend."""
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"{self.base_url}/api/stocks/{symbol}",
-                    headers=self.headers
+                    headers=self._headers(),
                 )
                 response.raise_for_status()
                 return response.json()
         except Exception as e:
             logger.error(f"Error fetching stock data for {symbol}: {e}")
             return None
-    
+
     async def get_news(self, symbol: str, limit: int = 10) -> Optional[list]:
-        """Fetch news for a symbol from backend."""
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"{self.base_url}/api/news/{symbol}",
                     params={"limit": limit},
-                    headers=self.headers
+                    headers=self._headers(),
                 )
                 response.raise_for_status()
                 return response.json()
         except Exception as e:
             logger.error(f"Error fetching news for {symbol}: {e}")
             return None
-    
+
     async def get_index_data(self, index_name: str) -> Optional[Dict[str, Any]]:
-        """Fetch index data from backend."""
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"{self.base_url}/api/indices/{index_name}",
-                    headers=self.headers
+                    headers=self._headers(),
                 )
                 response.raise_for_status()
                 return response.json()
         except Exception as e:
             logger.error(f"Error fetching index data for {index_name}: {e}")
             return None
-    
+
     async def get_fundamental_data(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Fetch fundamental data from backend."""
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"{self.base_url}/api/fundamentals/{symbol}",
-                    headers=self.headers
+                    headers=self._headers(),
                 )
                 response.raise_for_status()
                 return response.json()

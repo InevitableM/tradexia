@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     agent_temperature: float = 0.7
     agent_max_tokens: int = 2048
     
-    # Backend API
-    backend_api_url: str = "http://localhost:8000"
+    # Backend API (Node backend, not this ADK server)
+    backend_api_url: str = "http://localhost:4000"
     backend_api_key: str = ""
     
     # Redis Cache
