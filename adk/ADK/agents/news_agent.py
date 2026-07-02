@@ -98,16 +98,16 @@ def get_stock_news(symbol: str) -> Dict[str, Any]:
         return {"symbol": symbol, "error": str(e)}
 
 
-def _news_after_agent_callback(callback_context: CallbackContext):
-    """Log confirmation that output_key has written news_result to session state."""
-    news_result = callback_context.state.get("news_result")
-    if news_result:
-        logger.info(
-            f"[news_after_agent_callback] news_result in state ({len(str(news_result))} chars)"
-        )
-    else:
-        logger.warning("[news_after_agent_callback] news_result not found in state after agent run")
-    return None
+# def _news_after_agent_callback(callback_context: CallbackContext):
+#     """Log confirmation that output_key has written news_result to session state."""
+#     news_result = callback_context.state.get("news_result")
+#     if news_result:
+#         logger.info(
+#             f"[news_after_agent_callback] news_result in state ({len(str(news_result))} chars)"
+#         )
+#     else:
+#         logger.warning("[news_after_agent_callback] news_result not found in state after agent run")
+#     return None
 
 
 def make_news_agent() -> LlmAgent:
@@ -117,7 +117,6 @@ def make_news_agent() -> LlmAgent:
         name="news_intelligence_agent",
         description="Analyzes news and sentiment for stocks and indices using RSS feeds",
         output_key="news_result",
-        after_agent_callback=_news_after_agent_callback,
         instruction="""You are a financial news analysis expert specializing in Indian stock markets and indices.
 
     When asked about a stock or index, call get_stock_news(symbol) to fetch the latest articles.

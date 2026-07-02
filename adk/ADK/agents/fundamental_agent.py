@@ -95,6 +95,9 @@ def get_screener_data(symbol: str) -> Dict[str, Any]:
         data["cash_flow"] = parse_table("cash-flow")
         data["shareholding"] = parse_table("shareholding")
 
+        # Also fetch last 1 month of daily price history from Yahoo Finance
+        data["history_1mo"] = get_historical_data(symbol, range="1mo", interval="1d")
+
         # --- cache write ---
         try:
             cache.set(f"screener:{slug}", data, ttl=_SCREENER_TTL)
@@ -289,18 +292,18 @@ def get_historical_data(symbol: str, range: str = "1y", interval: str = "1d") ->
         return {"error": f"Failed to fetch historical data for {symbol}: {str(e)}"}
 
 
-def _fundamental_after_agent_callback(callback_context: CallbackContext):
-    """Log confirmation that output_key has written fundamental_result to session state."""
-    fundamental_result = callback_context.state.get("fundamental_result")
-    if fundamental_result:
-        logger.info(
-            f"[fundamental_after_agent_callback] fundamental_result in state ({len(str(fundamental_result))} chars)"
-        )
-    else:
-        logger.warning(
-            "[fundamental_after_agent_callback] fundamental_result not found in state after agent run"
-        )
-    return None
+# def _fundamental_after_agent_callback(callback_context: CallbackContext):
+#     """Log confirmation that output_key has written fundamental_result to session state."""
+#     fundamental_result = callback_context.state.get("fundamental_result")
+#     if fundamental_result:
+#         logger.info(
+#             f"[fundamental_after_agent_callback] fundamental_result in state ({len(str(fundamental_result))} chars)"
+#         )
+#     else:
+#         logger.warning(
+#             "[fundamental_after_agent_callback] fundamental_result not found in state after agent run"
+#         )
+#     return None
 
 
 def make_fundamental_agent() -> LlmAgent:
@@ -310,7 +313,6 @@ def make_fundamental_agent() -> LlmAgent:
         name="fundamental_analysis_agent",
         description="Analyzes company fundamentals and financial health",
         output_key="fundamental_result",
-        after_agent_callback=_fundamental_after_agent_callback,
         instruction="""You are a fundamental analysis expert for Indian stock markets and indices.
 
     When asked to analyze a stock or index, call get_screener_data(symbol) to retrieve all
