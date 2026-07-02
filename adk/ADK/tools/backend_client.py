@@ -1,4 +1,5 @@
 """Backend API client for making requests to the Node backend service."""
+
 import httpx
 from typing import Optional, Dict, Any
 from loguru import logger
@@ -17,7 +18,7 @@ class BackendClient:
         if access_token:
             headers["Authorization"] = f"Bearer {access_token}"
         return headers
-    
+
     async def save_conversation(
         self,
         session_id: str,
@@ -43,59 +44,6 @@ class BackendClient:
                 return response.json()
         except Exception as e:
             logger.error(f"[backend_client] save_conversation failed: {e}")
-            return None
-
-    async def get_stock_data(self, symbol: str) -> Optional[Dict[str, Any]]:
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.base_url}/api/stocks/{symbol}",
-                    headers=self._headers(),
-                )
-                response.raise_for_status()
-                return response.json()
-        except Exception as e:
-            logger.error(f"Error fetching stock data for {symbol}: {e}")
-            return None
-
-    async def get_news(self, symbol: str, limit: int = 10) -> Optional[list]:
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.base_url}/api/news/{symbol}",
-                    params={"limit": limit},
-                    headers=self._headers(),
-                )
-                response.raise_for_status()
-                return response.json()
-        except Exception as e:
-            logger.error(f"Error fetching news for {symbol}: {e}")
-            return None
-
-    async def get_index_data(self, index_name: str) -> Optional[Dict[str, Any]]:
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.base_url}/api/indices/{index_name}",
-                    headers=self._headers(),
-                )
-                response.raise_for_status()
-                return response.json()
-        except Exception as e:
-            logger.error(f"Error fetching index data for {index_name}: {e}")
-            return None
-
-    async def get_fundamental_data(self, symbol: str) -> Optional[Dict[str, Any]]:
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.base_url}/api/fundamentals/{symbol}",
-                    headers=self._headers(),
-                )
-                response.raise_for_status()
-                return response.json()
-        except Exception as e:
-            logger.error(f"Error fetching fundamental data for {symbol}: {e}")
             return None
 
 
