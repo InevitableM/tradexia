@@ -32,4 +32,6 @@ Thumbs.db
 #frontend
 .next/
 
+k8s/
+
 

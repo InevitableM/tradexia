@@ -1,0 +1,7 @@
+.venv
+__pycache__
+*.pyc
+.env
+ADK/.env
+ADK/.adk
+*.log
