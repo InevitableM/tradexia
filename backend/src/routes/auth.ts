@@ -8,14 +8,7 @@ router.post("/register", async (req: Request, res: Response) => {
   console.log(`[route] POST /api/auth/register body=${JSON.stringify({ ...req.body, password: "***" })}`);
   try {
     const result = await authService.register(req.body);
-    console.log(`[route] register success userId=${result.userId}`);
-    // refreshToken stays in Redis — never sent to client
-    res.status(201).json({ success: true, data: {
-      userId: result.userId,
-      email: result.email,
-      name: result.name,
-      accessToken: result.accessToken,
-    }});
+    res.status(201).json({ success: true, data: result });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Registration failed";
     const status = message === "Email already registered" ? 409 : 400;
@@ -36,13 +29,52 @@ router.post("/login", async (req: Request, res: Response) => {
     }});
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Login failed";
-    const status = message === "Invalid credentials" ? 401 : 400;
+    const status = message === "Invalid credentials" ? 401
+                 : message === "Email not verified"  ? 403
+                 : 400;
+    res.status(status).json({ success: false, error: message });
+  }
+});
+
+// GET /api/auth/verify?token=xxx
+// Called when user clicks the link in their email.
+// Marks the user verified then redirects to login with a flag.
+router.get("/verify", async (req: Request, res: Response) => {
+  const token = req.query.token as string | undefined;
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+
+  if (!token) {
+    res.redirect(`${frontendUrl}/auth/login?verified=invalid`);
+    return;
+  }
+
+  try {
+    await authService.verifyEmail(token);
+    res.redirect(`${frontendUrl}/auth/login?verified=true`);
+  } catch {
+    res.redirect(`${frontendUrl}/auth/login?verified=expired`);
+  }
+});
+
+// POST /api/auth/resend-verification  — body: { email }
+router.post("/resend-verification", async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body as { email?: string };
+    if (!email) {
+      res.status(400).json({ success: false, error: "email is required" });
+      return;
+    }
+    await authService.resendVerification(email);
+    // Always return success to avoid revealing whether the email exists
+    res.json({ success: true, data: { message: "If that email is registered, a new verification link has been sent" } });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to resend";
+    const status = message === "Please wait before requesting another email" ? 429 : 400;
     res.status(status).json({ success: false, error: message });
   }
 });
 
 // POST /api/auth/refresh  — body: { userId }
-// Looks up the refresh token from Redis, issues new tokens, returns new accessToken only
 router.post("/refresh", async (req: Request, res: Response) => {
   try {
     const { userId } = req.body as { userId?: string };

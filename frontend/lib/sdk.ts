@@ -15,8 +15,9 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
     headers: { ...getHeaders(), ...(options.headers ?? {}) },
   });
 
-  // Auto-refresh on 401 using userId stored in localStorage
-  if (res.status === 401 && retry && typeof window !== "undefined") {
+  // Auto-refresh on 401 — but not for auth endpoints themselves
+  const isAuthRoute = path.startsWith("/api/auth/");
+  if (res.status === 401 && retry && !isAuthRoute && typeof window !== "undefined") {
     const userId = localStorage.getItem("userId");
     if (userId) {
       try {
@@ -54,12 +55,19 @@ export interface AuthResult {
   accessToken: string;
 }
 
-export async function register(email: string, password: string, name?: string): Promise<AuthResult> {
-  const res = await request<{ success: boolean; data: AuthResult }>("/api/auth/register", {
+export async function register(email: string, password: string, name?: string): Promise<{ message: string }> {
+  const res = await request<{ success: boolean; data: { message: string } }>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify({ email, password, name }),
   });
   return res.data;
+}
+
+export async function resendVerification(email: string): Promise<void> {
+  await request("/api/auth/resend-verification", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
 }
 
 export async function login(email: string, password: string): Promise<AuthResult> {

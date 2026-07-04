@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { MessageSquare, Eye, EyeOff } from "lucide-react";
+import { MessageSquare, Eye, EyeOff, Mail } from "lucide-react";
 import * as sdk from "@/lib/sdk";
 
+const INPUT_CLS = "w-full px-3 py-2.5 text-sm text-foreground rounded-lg border border-border bg-input-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all";
+
 export default function SignupForm() {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,6 +16,9 @@ export default function SignupForm() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendMsg, setResendMsg] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,10 +27,9 @@ export default function SignupForm() {
     if (password !== confirm) { setError("Passwords do not match."); return; }
     setLoading(true);
     try {
-      const result = await sdk.register(email, password, name || undefined);
-      localStorage.setItem("accessToken", result.accessToken);
-      localStorage.setItem("userId", result.userId);
-      router.push("/chat");
+      await sdk.register(email, password, name || undefined);
+      setDone(true);
+
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -35,6 +37,58 @@ export default function SignupForm() {
     }
   }
 
+  async function handleResend() {
+    setResending(true);
+    setResendMsg("");
+    try {
+      await sdk.resendVerification(email);
+      setResendMsg("Verification email resent — check your inbox.");
+    } catch (err: unknown) {
+      setResendMsg(err instanceof Error ? err.message : "Could not resend email.");
+    } finally {
+      setResending(false);
+    }
+  }
+
+  // ── Check-your-email screen ──────────────────────────────────────────────
+  if (done) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center mx-auto mb-5">
+            <Mail size={22} className="text-foreground" />
+          </div>
+          <h1 className="text-xl font-semibold text-foreground tracking-tight mb-2">Check your email</h1>
+          <p className="text-sm text-muted-foreground leading-relaxed mb-1">
+            We sent a verification link to
+          </p>
+          <p className="text-sm font-medium text-foreground mb-6">{email}</p>
+          <p className="text-xs text-muted-foreground mb-6">
+            Click the link in the email to verify your account. The link expires in 24 hours.
+          </p>
+
+          {resendMsg && (
+            <p className="text-xs text-muted-foreground bg-accent rounded-md px-3 py-2 mb-4">
+              {resendMsg}
+            </p>
+          )}
+
+          <button onClick={handleResend} disabled={resending}
+            className="text-sm text-foreground font-medium hover:underline underline-offset-2 disabled:opacity-50">
+            {resending ? "Sending…" : "Resend verification email"}
+          </button>
+
+          <p className="text-center text-sm text-muted-foreground mt-6">
+            <Link href="/auth/login" className="text-foreground font-medium hover:underline underline-offset-2">
+              Back to sign in
+            </Link>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Sign-up form ─────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
@@ -52,17 +106,13 @@ export default function SignupForm() {
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground" htmlFor="su-name">Name</label>
             <input id="su-name" type="text" value={name} onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
-              className="w-full px-3 py-2.5 text-sm text-foreground rounded-lg border border-border bg-input-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-            />
+              placeholder="Your name" className={INPUT_CLS} />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground" htmlFor="su-email">Email</label>
             <input id="su-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com" required
-              className="w-full px-3 py-2.5 text-sm text-foreground rounded-lg border border-border bg-input-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-            />
+              placeholder="you@example.com" required className={INPUT_CLS} />
           </div>
 
           <div className="space-y-1.5">
@@ -70,8 +120,7 @@ export default function SignupForm() {
             <div className="relative">
               <input id="su-password" type={showPassword ? "text" : "password"} value={password}
                 onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" required
-                className="w-full px-3 py-2.5 pr-10 text-sm text-foreground rounded-lg border border-border bg-input-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-              />
+                className={`${INPUT_CLS} pr-10`} />
               <button type="button" onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                 {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -84,8 +133,7 @@ export default function SignupForm() {
             <div className="relative">
               <input id="su-confirm" type={showConfirm ? "text" : "password"} value={confirm}
                 onChange={(e) => setConfirm(e.target.value)} placeholder="Repeat your password" required
-                className="w-full px-3 py-2.5 pr-10 text-sm text-foreground rounded-lg border border-border bg-input-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-              />
+                className={`${INPUT_CLS} pr-10`} />
               <button type="button" onClick={() => setShowConfirm(!showConfirm)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                 {showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}

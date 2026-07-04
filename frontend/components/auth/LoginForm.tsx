@@ -1,22 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { MessageSquare, Eye, EyeOff } from "lucide-react";
 import * as sdk from "@/lib/sdk";
 
+const INPUT_CLS = "w-full px-3 py-2.5 text-sm text-foreground rounded-lg border border-border bg-input-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all";
+
 export default function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [banner, setBanner] = useState("");
+  const [resending, setResending] = useState(false);
+  const [resendMsg, setResendMsg] = useState("");
+
+  useEffect(() => {
+    const v = searchParams.get("verified");
+    if (v === "true")    setBanner("Email verified! You can now sign in.");
+    if (v === "expired") setBanner("Verification link expired. Sign in to request a new one.");
+    if (v === "invalid") setBanner("Invalid verification link.");
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setResendMsg("");
     setLoading(true);
     try {
       const result = await sdk.login(email, password);
@@ -24,11 +38,28 @@ export default function LoginForm() {
       localStorage.setItem("userId", result.userId);
       router.push("/chat");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const msg = err instanceof Error ? err.message : "Login failed";
+      setError(msg);
     } finally {
       setLoading(false);
     }
   }
+
+  async function handleResend() {
+    if (!email) { setResendMsg("Enter your email above first."); return; }
+    setResending(true);
+    setResendMsg("");
+    try {
+      await sdk.resendVerification(email);
+      setResendMsg("Verification email sent — check your inbox.");
+    } catch (err: unknown) {
+      setResendMsg(err instanceof Error ? err.message : "Could not resend email.");
+    } finally {
+      setResending(false);
+    }
+  }
+
+  const isUnverified = error === "Email not verified";
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -43,18 +74,22 @@ export default function LoginForm() {
           </div>
         </div>
 
+        {banner && (
+          <p className={`text-xs rounded-md px-3 py-2 mb-4 text-center ${
+            banner.startsWith("Email verified")
+              ? "bg-green-50 text-green-700 border border-green-200"
+              : "bg-accent text-muted-foreground"
+          }`}>
+            {banner}
+          </p>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground" htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
+            <input id="email" type="email" value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-              className="w-full px-3 py-2.5 text-sm text-foreground rounded-lg border border-border bg-input-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-            />
+              placeholder="you@example.com" required className={INPUT_CLS} />
           </div>
 
           <div className="space-y-1.5">
@@ -65,36 +100,33 @@ export default function LoginForm() {
               </button>
             </div>
             <div className="relative">
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                value={password}
+              <input id="password" type={showPassword ? "text" : "password"} value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                className="w-full px-3 py-2.5 pr-10 text-sm text-foreground rounded-lg border border-border bg-input-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              >
+                placeholder="••••••••" required className={`${INPUT_CLS} pr-10`} />
+              <button type="button" onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                 {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
           </div>
 
           {error && (
-            <p className="text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded-md px-3 py-2">
-              {error}
-            </p>
+            <div className="text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded-md px-3 py-2">
+              <p>{error}</p>
+              {isUnverified && (
+                <div className="mt-1.5 flex items-center gap-2">
+                  <button type="button" onClick={handleResend} disabled={resending}
+                    className="underline underline-offset-2 hover:opacity-70 disabled:opacity-50 transition-opacity">
+                    {resending ? "Sending…" : "Resend verification email"}
+                  </button>
+                  {resendMsg && <span className="text-muted-foreground">— {resendMsg}</span>}
+                </div>
+              )}
+            </div>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full mt-1 bg-primary text-primary-foreground rounded-lg px-4 py-2.5 text-sm font-medium hover:opacity-90 active:opacity-80 transition-opacity disabled:opacity-50"
-          >
+          <button type="submit" disabled={loading}
+            className="w-full mt-1 bg-primary text-primary-foreground rounded-lg px-4 py-2.5 text-sm font-medium hover:opacity-90 active:opacity-80 transition-opacity disabled:opacity-50">
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>

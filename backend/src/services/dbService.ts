@@ -12,6 +12,8 @@ export interface UserRow {
   email: string;
   passwordHash: string;
   name: string | null;
+  isVerified: boolean;
+  verifiedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,7 +35,7 @@ export interface UpdateUserInput {
 export async function findUserByEmail(email: string): Promise<UserRow | null> {
   console.log(`[dbService] findUserByEmail → ${email}`);
   const rows = await prisma.$queryRaw<UserRow[]>`
-    SELECT id, email, "passwordHash", name, "createdAt", "updatedAt"
+    SELECT id, email, "passwordHash", name, "isVerified", "verifiedAt", "createdAt", "updatedAt"
     FROM users
     WHERE email = ${email}
     LIMIT 1
@@ -47,7 +49,7 @@ export async function findUserByEmail(email: string): Promise<UserRow | null> {
 // ---------------------------------------------------------------------------
 export async function findUserById(id: string): Promise<UserRow | null> {
   const rows = await prisma.$queryRaw<UserRow[]>`
-    SELECT id, email, "passwordHash", name, "createdAt", "updatedAt"
+    SELECT id, email, "passwordHash", name, "isVerified", "verifiedAt", "createdAt", "updatedAt"
     FROM users
     WHERE id = ${id}::uuid
     LIMIT 1
@@ -62,9 +64,9 @@ export async function createUser(input: CreateUserInput): Promise<UserRow> {
   console.log(`[dbService] createUser → email=${input.email} name=${input.name ?? null}`);
   const { email, passwordHash, name } = input;
   const rows = await prisma.$queryRaw<UserRow[]>`
-    INSERT INTO users (email, "passwordHash", name, "createdAt", "updatedAt")
-    VALUES (${email}, ${passwordHash}, ${name ?? null}, NOW(), NOW())
-    RETURNING id, email, "passwordHash", name, "createdAt", "updatedAt"
+    INSERT INTO users (email, "passwordHash", name, "isVerified", "createdAt", "updatedAt")
+    VALUES (${email}, ${passwordHash}, ${name ?? null}, false, NOW(), NOW())
+    RETURNING id, email, "passwordHash", name, "isVerified", "verifiedAt", "createdAt", "updatedAt"
   `;
   console.log(`[dbService] createUser ← id=${rows[0].id}`);
   return rows[0];
@@ -99,6 +101,17 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<Us
 
   const rows = await prisma.$queryRawUnsafe<UserRow[]>(query, ...values, id);
   return rows[0] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// markUserVerified
+// ---------------------------------------------------------------------------
+export async function markUserVerified(id: string): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE users
+    SET "isVerified" = true, "verifiedAt" = NOW(), "updatedAt" = NOW()
+    WHERE id = ${id}::uuid
+  `;
 }
 
 // ---------------------------------------------------------------------------
