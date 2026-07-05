@@ -65,6 +65,8 @@ export default function SignupForm() {
           <p className="text-sm font-medium text-foreground mb-6">{email}</p>
           <p className="text-xs text-muted-foreground mb-6">
             Click the link in the email to verify your account. The link expires in 24 hours.
+            <br />
+            Don&apos;t see it? Check your spam or junk folder.
           </p>
 
           {resendMsg && (
