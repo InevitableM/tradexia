@@ -160,16 +160,53 @@ export async function deleteConversation(id: string): Promise<void> {
 
 // ─── Analysis ─────────────────────────────────────────────────────────────────
 
-export interface AnalysisResult {
-  response: string;
-  session_id: string;
-  user_id: string;
-}
+export type StreamEvent =
+  | { type: "status"; message: string }
+  | { type: "result"; message: string }
+  | { type: "error"; message: string }
+  | { type: "done" };
 
-export async function runAnalysis(query: string, sessionId: string): Promise<AnalysisResult> {
-  const res = await request<{ success: boolean; data: AnalysisResult }>("/api/analysis", {
+export async function* streamAnalysis(
+  query: string,
+  sessionId: string
+): AsyncGenerator<StreamEvent> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+  const res = await fetch(`${BASE_URL}/api/analysis/stream`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ query, sessionId }),
   });
-  return res.data;
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Stream failed" }));
+    yield { type: "error", message: err.error ?? "Stream failed" };
+    return;
+  }
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const raw = line.slice(6).trim();
+      if (!raw) continue;
+      try {
+        yield JSON.parse(raw) as StreamEvent;
+      } catch {
+        // malformed line — skip
+      }
+    }
+  }
 }

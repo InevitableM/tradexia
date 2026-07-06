@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { authenticate } from "../middleware/requestHandler";
 import { AuthRequest } from "../types";
-import { runAnalysis } from "../services/adkClient";
+import { runAnalysis, streamAnalysis } from "../services/adkClient";
 
 const router = Router();
 
@@ -21,7 +21,6 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
     }
 
     const userId = req.user!.userId;
-    // Forward the raw JWT so ADK can call /api/conversations on our behalf
     const accessToken = req.headers.authorization!.slice(7);
     const result = await runAnalysis({ query, session_id: sessionId, user_id: userId, access_token: accessToken });
 
@@ -29,6 +28,40 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error("[analysis]", err);
     res.status(502).json({ success: false, error: "ADK service unavailable" });
+  }
+});
+
+// POST /api/analysis/stream
+// Pipes ADK's SSE stream directly to the browser.
+// Body: { query, sessionId }
+router.post("/stream", authenticate, async (req: AuthRequest, res: Response) => {
+  const { query, sessionId } = req.body as { query?: string; sessionId?: string };
+
+  if (!query) { res.status(400).json({ success: false, error: "query is required" }); return; }
+  if (!sessionId) { res.status(400).json({ success: false, error: "sessionId is required" }); return; }
+
+  const userId = req.user!.userId;
+  const accessToken = req.headers.authorization!.slice(7);
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  try {
+    const stream = await streamAnalysis({ query, session_id: sessionId, user_id: userId, access_token: accessToken });
+    const nodeStream = stream as import("stream").Readable;
+    nodeStream.pipe(res);
+    nodeStream.on("error", (err) => {
+      console.error("[analysis/stream] ADK stream error:", err);
+      res.write(`data: ${JSON.stringify({ type: "error", message: "ADK stream error" })}\n\n`);
+      res.end();
+    });
+    req.on("close", () => nodeStream.destroy());
+  } catch (err) {
+    console.error("[analysis/stream]", err);
+    res.write(`data: ${JSON.stringify({ type: "error", message: "ADK service unavailable" })}\n\n`);
+    res.end();
   }
 });
 

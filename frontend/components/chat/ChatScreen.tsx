@@ -16,6 +16,7 @@ export default function ChatScreen({ conversationId }: { conversationId?: string
   const [activeId, setActiveId] = useState<string | null>(conversationId ?? null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [statusMsg, setStatusMsg] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -98,22 +99,34 @@ export default function ChatScreen({ conversationId }: { conversationId?: string
     setSending(true);
 
     try {
-      // Call ADK
-      const result = await sdk.runAnalysis(text, sessionId);
+      let responseText = "";
+
+      for await (const event of sdk.streamAnalysis(text, sessionId)) {
+        if (event.type === "status") {
+          setStatusMsg(event.message);
+        } else if (event.type === "result") {
+          responseText = event.message;
+          setStatusMsg("");
+        } else if (event.type === "error") {
+          throw new Error(event.message);
+        }
+        // "done" — nothing extra needed
+      }
+
+      if (!responseText) throw new Error("No response from ADK");
 
       const assistantMsg: Message = {
         id: `a-${Date.now()}`,
         role: "assistant",
-        content: result.response,
+        content: responseText,
         timestamp: new Date(),
       };
 
-      // Add assistant message optimistically
       setConversations((prev) => prev.map((c) =>
         c.id === currentId ? { ...c, messages: [...c.messages, assistantMsg], preview: text.slice(0, 50), timestamp: new Date() } : c
       ));
 
-      // ADK already persisted the conversation — fetch updated list to get real id
+      // ADK already persisted — fetch updated list to swap temp id for real db id
       if (currentId?.startsWith("temp-")) {
         const updated = await sdk.getConversations();
         const match = updated.find((c) => c.sessionId === sessionId);
@@ -128,12 +141,12 @@ export default function ChatScreen({ conversationId }: { conversationId?: string
         }
       }
     } catch (err) {
-      // Remove optimistic user message on failure
       setConversations((prev) => prev.map((c) =>
         c.id === currentId
           ? { ...c, messages: c.messages.filter((m) => m.id !== tempUserMsg.id) }
           : c
       ));
+      setStatusMsg("");
       console.error("[chat] send failed", err);
     } finally {
       setSending(false);
@@ -225,10 +238,19 @@ export default function ChatScreen({ conversationId }: { conversationId?: string
                   <div className="w-7 h-7 rounded-full bg-foreground flex items-center justify-center flex-shrink-0">
                     <span className="text-[10px] text-background font-semibold">AI</span>
                   </div>
-                  <div className="flex gap-1 items-center h-7">
-                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+                  <div className="flex items-center gap-2 h-7">
+                    {statusMsg ? (
+                      <>
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-pulse shrink-0" />
+                        <span className="text-sm text-muted-foreground">{statusMsg}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+                      </>
+                    )}
                   </div>
                 </div>
               )}

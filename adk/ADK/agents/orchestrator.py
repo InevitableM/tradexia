@@ -9,6 +9,17 @@ from ..cache import get_cache_client
 from ..tools.backend_client import get_backend_client
 from ..core import get_agent_registry, get_agent_executor, get_main_runner
 
+# Imported lazily to avoid circular imports at module load time
+def _emit_status(message: str) -> None:
+    """Fire-and-forget status emit — works from sync tool functions."""
+    try:
+        from server import emit_status  # type: ignore[import]
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.ensure_future(emit_status(message))
+    except Exception:
+        pass  # server not imported (e.g. unit tests) — silently skip
+
 # Import sub-agent factory functions
 from .news_agent import make_news_agent
 from .synthesis_agent import make_synthesis_agent
@@ -71,6 +82,10 @@ def call_agents_parallel(agent_names: List[str], query: str) -> str:
     try:
         logger.info(f"Calling agents in parallel: {agent_names} with query: {query}")
 
+        label_map = {"news": "Fetching latest news", "fundamental": "Fetching financial data", "synthesis": "Synthesising insights"}
+        labels = [label_map.get(n, f"Running {n}") for n in agent_names]
+        _emit_status(", ".join(labels) + "…")
+
         executor = get_agent_executor()
         # Reuse the same session_id within this orchestrator turn
         session_id = _get_or_create_turn_session_id()
@@ -125,6 +140,10 @@ def call_agents_sequential(agent_names: List[str], query: str) -> str:
     """
     try:
         logger.info(f"Calling agents sequentially: {agent_names} with query: {query}")
+
+        label_map = {"news": "Analysing news", "fundamental": "Analysing fundamentals", "synthesis": "Synthesising insights"}
+        labels = [label_map.get(n, f"Running {n}") for n in agent_names]
+        _emit_status(", ".join(labels) + "…")
 
         executor = get_agent_executor()
         # Reuse the SAME session_id from the parallel call so session state is shared
