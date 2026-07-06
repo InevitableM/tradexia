@@ -88,6 +88,13 @@ def call_agents_parallel(agent_names: List[str], query: str) -> str:
                     )
                 )
             finally:
+                # Drain any lingering aiohttp / genai cleanup tasks before closing
+                try:
+                    pending = asyncio.all_tasks(loop)
+                    if pending:
+                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                except Exception:
+                    pass
                 loop.close()
 
         future = _thread_pool.submit(run_async_in_thread)
@@ -136,6 +143,12 @@ def call_agents_sequential(agent_names: List[str], query: str) -> str:
                     )
                 )
             finally:
+                try:
+                    pending = asyncio.all_tasks(loop)
+                    if pending:
+                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                except Exception:
+                    pass
                 loop.close()
 
         future = _thread_pool.submit(run_async_in_thread)
