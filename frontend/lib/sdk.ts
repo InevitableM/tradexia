@@ -78,6 +78,30 @@ export async function login(email: string, password: string): Promise<AuthResult
   return res.data;
 }
 
+export type GoogleLoginResult =
+  | ({ status: "logged_in" } & AuthResult)
+  | { status: "new_user"; signupToken: string; email: string; name?: string };
+
+export async function googleLogin(idToken: string): Promise<GoogleLoginResult> {
+  const res = await request<{ success: boolean; data: GoogleLoginResult }>("/api/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ idToken }),
+  });
+  return res.data;
+}
+
+export async function completeGoogleSignup(
+  signupToken: string,
+  password: string,
+  name?: string
+): Promise<AuthResult> {
+  const res = await request<{ success: boolean; data: AuthResult }>("/api/auth/google/complete", {
+    method: "POST",
+    body: JSON.stringify({ signupToken, password, name }),
+  });
+  return res.data;
+}
+
 export async function logout(userId: string): Promise<void> {
   await request("/api/auth/logout", {
     method: "POST",

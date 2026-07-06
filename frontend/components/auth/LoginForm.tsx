@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MessageSquare, Eye, EyeOff } from "lucide-react";
 import * as sdk from "@/lib/sdk";
+import GoogleSignInButton from "./GoogleSignInButton";
 
 const INPUT_CLS = "w-full px-3 py-2.5 text-sm text-foreground rounded-lg border border-border bg-input-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all";
 
@@ -40,6 +41,28 @@ export default function LoginForm() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Login failed";
       setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleToken(idToken: string) {
+    setError("");
+    setLoading(true);
+    try {
+      const result = await sdk.googleLogin(idToken);
+      if (result.status === "logged_in") {
+        localStorage.setItem("accessToken", result.accessToken);
+        localStorage.setItem("userId", result.userId);
+        router.push("/chat");
+      } else {
+        sessionStorage.setItem("googleSignupToken", result.signupToken);
+        sessionStorage.setItem("googleSignupEmail", result.email);
+        if (result.name) sessionStorage.setItem("googleSignupName", result.name);
+        router.push("/auth/complete");
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed");
     } finally {
       setLoading(false);
     }
@@ -130,6 +153,14 @@ export default function LoginForm() {
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
+
+        <div className="flex items-center gap-3 my-5">
+          <div className="h-px bg-border flex-1" />
+          <span className="text-xs text-muted-foreground">or</span>
+          <div className="h-px bg-border flex-1" />
+        </div>
+
+        <GoogleSignInButton onToken={handleGoogleToken} />
 
         <p className="text-center text-sm text-muted-foreground mt-5">
           {"Don't have an account? "}

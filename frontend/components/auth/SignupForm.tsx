@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { MessageSquare, Eye, EyeOff, Mail } from "lucide-react";
 import * as sdk from "@/lib/sdk";
+import GoogleSignInButton from "./GoogleSignInButton";
 
 const INPUT_CLS = "w-full px-3 py-2.5 text-sm text-foreground rounded-lg border border-border bg-input-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all";
 
 export default function SignupForm() {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,6 +35,28 @@ export default function SignupForm() {
 
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleToken(idToken: string) {
+    setError("");
+    setLoading(true);
+    try {
+      const result = await sdk.googleLogin(idToken);
+      if (result.status === "logged_in") {
+        localStorage.setItem("accessToken", result.accessToken);
+        localStorage.setItem("userId", result.userId);
+        router.push("/chat");
+      } else {
+        sessionStorage.setItem("googleSignupToken", result.signupToken);
+        sessionStorage.setItem("googleSignupEmail", result.email);
+        if (result.name) sessionStorage.setItem("googleSignupName", result.name);
+        router.push("/auth/complete");
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed");
     } finally {
       setLoading(false);
     }
@@ -154,6 +179,14 @@ export default function SignupForm() {
             {loading ? "Creating account…" : "Create account"}
           </button>
         </form>
+
+        <div className="flex items-center gap-3 my-5">
+          <div className="h-px bg-border flex-1" />
+          <span className="text-xs text-muted-foreground">or</span>
+          <div className="h-px bg-border flex-1" />
+        </div>
+
+        <GoogleSignInButton onToken={handleGoogleToken} />
 
         <p className="text-center text-xs text-muted-foreground mt-4 leading-relaxed">
           By creating an account you agree to our{" "}

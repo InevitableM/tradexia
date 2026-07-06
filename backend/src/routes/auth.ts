@@ -74,6 +74,56 @@ router.post("/resend-verification", async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/auth/google  — body: { idToken }
+router.post("/google", async (req: Request, res: Response) => {
+  try {
+    const { idToken } = req.body as { idToken?: string };
+    if (!idToken) {
+      res.status(400).json({ success: false, error: "idToken is required" });
+      return;
+    }
+    const outcome = await authService.googleLogin(idToken);
+
+    if (outcome.status === "logged_in") {
+      res.json({ success: true, data: {
+        status: "logged_in",
+        userId: outcome.result.userId,
+        email: outcome.result.email,
+        name: outcome.result.name,
+        accessToken: outcome.result.accessToken,
+      }});
+    } else {
+      res.json({ success: true, data: {
+        status: "new_user",
+        signupToken: outcome.signupToken,
+        email: outcome.email,
+        name: outcome.name,
+      }});
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Google sign-in failed";
+    console.error(`[route] google login failed — ${message}`);
+    res.status(401).json({ success: false, error: message });
+  }
+});
+
+// POST /api/auth/google/complete  — body: { signupToken, password, name? }
+router.post("/google/complete", async (req: Request, res: Response) => {
+  try {
+    const result = await authService.completeGoogleSignup(req.body);
+    res.status(201).json({ success: true, data: {
+      userId: result.userId,
+      email: result.email,
+      name: result.name,
+      accessToken: result.accessToken,
+    }});
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Could not complete signup";
+    const status = message === "Email already registered" ? 409 : 400;
+    res.status(status).json({ success: false, error: message });
+  }
+});
+
 // POST /api/auth/refresh  — body: { userId }
 router.post("/refresh", async (req: Request, res: Response) => {
   try {

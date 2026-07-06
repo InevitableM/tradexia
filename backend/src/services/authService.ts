@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { OAuth2Client } from "google-auth-library";
 import { cacheGet, cacheSet, cacheDel } from "./redis";
 import * as dbService from "./dbService";
 import { sendVerificationEmail } from "./emailService";
@@ -10,6 +11,9 @@ const REFRESH_TTL        = 30 * 24 * 60 * 60; // 30 days
 const VERIFY_TTL         = 24 * 60 * 60;       // 24 hours
 const RESEND_COOLDOWN    = 60;                  // 60 seconds between resends
 const BCRYPT_ROUNDS      = 12;
+const GOOGLE_SIGNUP_TTL  = "10m";
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 function getSecret(): string {
   const secret = process.env.JWT_SECRET;
@@ -171,4 +175,85 @@ export async function logout(userId: string): Promise<void> {
 
 export function verifyAccessToken(token: string): AuthPayload {
   return jwt.verify(token, getSecret()) as AuthPayload;
+}
+
+// ---------------------------------------------------------------------------
+// Google sign-in
+// ---------------------------------------------------------------------------
+
+interface GoogleSignupPayload {
+  email: string;
+  name?: string;
+  purpose: "google-signup";
+}
+
+export type GoogleLoginResult =
+  | { status: "logged_in"; result: AuthResult }
+  | { status: "new_user"; signupToken: string; email: string; name?: string };
+
+export async function googleLogin(idToken: string): Promise<GoogleLoginResult> {
+  const ticket = await googleClient.verifyIdToken({
+    idToken,
+    audience: process.env.GOOGLE_CLIENT_ID,
+  });
+  const payload = ticket.getPayload();
+  if (!payload?.email) throw new Error("Invalid Google token");
+
+  const { email, name } = payload;
+
+  const user = await dbService.findUserByEmail(email);
+  if (user) {
+    if (!user.isVerified) await dbService.markUserVerified(user.id);
+
+    const { accessToken, refreshToken } = issueTokens(user.id, email);
+    await cacheSet(`refresh:${user.id}`, refreshToken, REFRESH_TTL);
+
+    return {
+      status: "logged_in",
+      result: { userId: user.id, email, name: user.name ?? undefined, accessToken, refreshToken },
+    };
+  }
+
+  const signupToken = jwt.sign(
+    { email, name, purpose: "google-signup" } satisfies GoogleSignupPayload,
+    getSecret(),
+    { expiresIn: GOOGLE_SIGNUP_TTL }
+  );
+
+  return { status: "new_user", signupToken, email, name };
+}
+
+export interface CompleteGoogleSignupInput {
+  signupToken: string;
+  password: string;
+  name?: string;
+}
+
+export async function completeGoogleSignup(input: CompleteGoogleSignupInput): Promise<AuthResult> {
+  const { signupToken, password, name } = input;
+  if (!password || password.length < 8) throw new Error("Password must be at least 8 characters");
+
+  let payload: GoogleSignupPayload;
+  try {
+    payload = jwt.verify(signupToken, getSecret()) as GoogleSignupPayload;
+  } catch {
+    throw new Error("Signup session expired, please sign in with Google again");
+  }
+  if (payload.purpose !== "google-signup") throw new Error("Invalid signup token");
+
+  const existing = await dbService.findUserByEmail(payload.email);
+  if (existing) throw new Error("Email already registered");
+
+  const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+  const user = await dbService.createUser({
+    email: payload.email,
+    passwordHash,
+    name: name ?? payload.name,
+  });
+  await dbService.markUserVerified(user.id);
+
+  const { accessToken, refreshToken } = issueTokens(user.id, user.email);
+  await cacheSet(`refresh:${user.id}`, refreshToken, REFRESH_TTL);
+
+  return { userId: user.id, email: user.email, name: user.name ?? undefined, accessToken, refreshToken };
 }
