@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { authenticate } from "../middleware/requestHandler";
 import { AuthRequest } from "../types";
 import { runAnalysis, streamAnalysis } from "../services/adkClient";
+import { checkAndIncrementAnalysisQuota } from "../services/backendSdk";
 
 const router = Router();
 
@@ -21,10 +22,21 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
     }
 
     const userId = req.user!.userId;
+
+    const quota = await checkAndIncrementAnalysisQuota(userId);
+    if (!quota.allowed) {
+      res.status(429).json({
+        success: false,
+        error: "Daily analysis limit reached. Try again after 24 hours.",
+        data: { limit: quota.limit, remaining: 0, resetsInSeconds: quota.resetsInSeconds },
+      });
+      return;
+    }
+
     const accessToken = req.headers.authorization!.slice(7);
     const result = await runAnalysis({ query, session_id: sessionId, user_id: userId, access_token: accessToken });
 
-    res.json({ success: true, data: result });
+    res.json({ success: true, data: { ...result, quota: { limit: quota.limit, remaining: quota.remaining } } });
   } catch (err) {
     console.error("[analysis]", err);
     res.status(502).json({ success: false, error: "ADK service unavailable" });
@@ -42,6 +54,16 @@ router.post("/stream", authenticate, async (req: AuthRequest, res: Response) => 
 
   const userId = req.user!.userId;
   const accessToken = req.headers.authorization!.slice(7);
+
+  const quota = await checkAndIncrementAnalysisQuota(userId);
+  if (!quota.allowed) {
+    res.status(429).json({
+      success: false,
+      error: "Daily analysis limit reached. Try again later.",
+      data: { limit: quota.limit, remaining: 0, resetsInSeconds: quota.resetsInSeconds },
+    });
+    return;
+  }
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");

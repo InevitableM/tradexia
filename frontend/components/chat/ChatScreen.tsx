@@ -17,6 +17,7 @@ export default function ChatScreen({ conversationId }: { conversationId?: string
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -68,6 +69,7 @@ export default function ChatScreen({ conversationId }: { conversationId?: string
   async function handleSend() {
     const text = input.trim();
     if (!text || sending) return;
+    setErrorMsg("");
 
     // If no active conversation, create a local placeholder first
     let currentId = activeId;
@@ -147,6 +149,7 @@ export default function ChatScreen({ conversationId }: { conversationId?: string
           : c
       ));
       setStatusMsg("");
+      setErrorMsg(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       console.error("[chat] send failed", err);
     } finally {
       setSending(false);
@@ -262,6 +265,11 @@ export default function ChatScreen({ conversationId }: { conversationId?: string
         {/* Input */}
         <div className="px-4 pb-4 shrink-0">
           <div className="max-w-2xl mx-auto">
+            {errorMsg && (
+              <p className="text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded-md px-3 py-2 mb-2">
+                {errorMsg}
+              </p>
+            )}
             <div className="flex items-end gap-2 border border-border rounded-xl bg-input-background px-3 py-2.5 focus-within:border-ring transition-colors">
               <textarea ref={textareaRef} rows={1} value={input}
                 onChange={handleTextareaChange} onKeyDown={handleKeyDown}
