@@ -2,8 +2,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
-import { cacheGet, cacheSet, cacheDel } from "./redis";
-import * as dbService from "./dbService";
+import { redis } from "./redis";
+import { db } from "./dbService";
 import { sendVerificationEmail } from "./emailService";
 import { AuthPayload } from "../types";
 
@@ -54,16 +54,16 @@ export async function register(input: RegisterInput): Promise<RegisterResult> {
 
   if (!email || !password) throw new Error("email and password are required");
 
-  const existing = await dbService.findUserByEmail(email);
+  const existing = await db.findUserByEmail(email);
   if (existing) throw new Error("Email already registered");
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  const user = await dbService.createUser({ email, name, passwordHash });
+  const user = await db.createUser({ email, name, passwordHash });
   console.log(`[authService] register — user created id=${user.id}`);
 
   // Generate a secure random token, store in Redis for 24h
   const token = crypto.randomBytes(32).toString("hex");
-  await cacheSet(`verify:${token}`, user.id, VERIFY_TTL);
+  await redis.cacheSet(`verify:${token}`, user.id, VERIFY_TTL);
 
   await sendVerificationEmail(email, token);
   console.log(`[authService] register — verification email sent to ${email}`);
@@ -91,7 +91,7 @@ export async function login(input: LoginInput): Promise<AuthResult> {
 
   if (!email || !password) throw new Error("email and password are required");
 
-  const user = await dbService.findUserByEmail(email);
+  const user = await db.findUserByEmail(email);
   if (!user) throw new Error("Invalid credentials");
 
   const valid = await bcrypt.compare(password, user.passwordHash);
@@ -100,7 +100,7 @@ export async function login(input: LoginInput): Promise<AuthResult> {
   if (!user.isVerified) throw new Error("Email not verified");
 
   const { accessToken, refreshToken } = issueTokens(user.id, email);
-  await cacheSet(`refresh:${user.id}`, refreshToken, REFRESH_TTL);
+  await redis.cacheSet(`refresh:${user.id}`, refreshToken, REFRESH_TTL);
 
   return { userId: user.id, email, name: user.name ?? undefined, accessToken, refreshToken };
 }
@@ -108,30 +108,30 @@ export async function login(input: LoginInput): Promise<AuthResult> {
 // ---------------------------------------------------------------------------
 
 export async function verifyEmail(token: string): Promise<void> {
-  const userId = await cacheGet<string>(`verify:${token}`);
+  const userId = await redis.cacheGet<string>(`verify:${token}`);
   if (!userId) throw new Error("Verification link is invalid or has expired");
 
-  await dbService.markUserVerified(userId);
-  await cacheDel(`verify:${token}`);
+  await db.markUserVerified(userId);
+  await redis.cacheDel(`verify:${token}`);
   console.log(`[authService] verifyEmail — userId=${userId} verified`);
 }
 
 // ---------------------------------------------------------------------------
 
 export async function resendVerification(email: string): Promise<void> {
-  const user = await dbService.findUserByEmail(email);
+  const user = await db.findUserByEmail(email);
   if (!user) return; // Don't reveal whether email exists
 
   if (user.isVerified) throw new Error("Email is already verified");
 
   // Rate-limit: one resend per 60 seconds per user
   const cooldownKey = `resend:${user.id}`;
-  const onCooldown = await cacheGet<string>(cooldownKey);
+  const onCooldown = await redis.cacheGet<string>(cooldownKey);
   if (onCooldown) throw new Error("Please wait before requesting another email");
 
   const token = crypto.randomBytes(32).toString("hex");
-  await cacheSet(`verify:${token}`, user.id, VERIFY_TTL);
-  await cacheSet(cooldownKey, "1", RESEND_COOLDOWN);
+  await redis.cacheSet(`verify:${token}`, user.id, VERIFY_TTL);
+  await redis.cacheSet(cooldownKey, "1", RESEND_COOLDOWN);
 
   await sendVerificationEmail(email, token);
   console.log(`[authService] resendVerification — email sent to ${email}`);
@@ -147,22 +147,22 @@ export interface RefreshResult {
 export async function refreshTokens(token: string): Promise<RefreshResult> {
   const payload = jwt.verify(token, getSecret()) as AuthPayload;
 
-  const stored = await cacheGet<string>(`refresh:${payload.userId}`);
+  const stored = await redis.cacheGet<string>(`refresh:${payload.userId}`);
   if (!stored || stored !== token) throw new Error("Refresh token invalid or revoked");
 
   const { accessToken, refreshToken } = issueTokens(payload.userId, payload.email);
-  await cacheSet(`refresh:${payload.userId}`, refreshToken, REFRESH_TTL);
+  await redis.cacheSet(`refresh:${payload.userId}`, refreshToken, REFRESH_TTL);
 
   return { accessToken, refreshToken };
 }
 
 export async function refreshByUserId(userId: string): Promise<string> {
-  const stored = await cacheGet<string>(`refresh:${userId}`);
+  const stored = await redis.cacheGet<string>(`refresh:${userId}`);
   if (!stored) throw new Error("Session expired or not found");
 
   const payload = jwt.verify(stored, getSecret()) as AuthPayload;
   const { accessToken, refreshToken } = issueTokens(payload.userId, payload.email);
-  await cacheSet(`refresh:${userId}`, refreshToken, REFRESH_TTL);
+  await redis.cacheSet(`refresh:${userId}`, refreshToken, REFRESH_TTL);
 
   return accessToken;
 }
@@ -170,7 +170,7 @@ export async function refreshByUserId(userId: string): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export async function logout(userId: string): Promise<void> {
-  await cacheDel(`refresh:${userId}`);
+  await redis.cacheDel(`refresh:${userId}`);
 }
 
 export function verifyAccessToken(token: string): AuthPayload {
@@ -201,12 +201,12 @@ export async function googleLogin(idToken: string): Promise<GoogleLoginResult> {
 
   const { email, name } = payload;
 
-  const user = await dbService.findUserByEmail(email);
+  const user = await db.findUserByEmail(email);
   if (user) {
-    if (!user.isVerified) await dbService.markUserVerified(user.id);
+    if (!user.isVerified) await db.markUserVerified(user.id);
 
     const { accessToken, refreshToken } = issueTokens(user.id, email);
-    await cacheSet(`refresh:${user.id}`, refreshToken, REFRESH_TTL);
+    await redis.cacheSet(`refresh:${user.id}`, refreshToken, REFRESH_TTL);
 
     return {
       status: "logged_in",
@@ -241,19 +241,19 @@ export async function completeGoogleSignup(input: CompleteGoogleSignupInput): Pr
   }
   if (payload.purpose !== "google-signup") throw new Error("Invalid signup token");
 
-  const existing = await dbService.findUserByEmail(payload.email);
+  const existing = await db.findUserByEmail(payload.email);
   if (existing) throw new Error("Email already registered");
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  const user = await dbService.createUser({
+  const user = await db.createUser({
     email: payload.email,
     passwordHash,
     name: name ?? payload.name,
   });
-  await dbService.markUserVerified(user.id);
+  await db.markUserVerified(user.id);
 
   const { accessToken, refreshToken } = issueTokens(user.id, user.email);
-  await cacheSet(`refresh:${user.id}`, refreshToken, REFRESH_TTL);
+  await redis.cacheSet(`refresh:${user.id}`, refreshToken, REFRESH_TTL);
 
   return { userId: user.id, email: user.email, name: user.name ?? undefined, accessToken, refreshToken };
 }

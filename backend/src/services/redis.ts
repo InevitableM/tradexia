@@ -1,42 +1,53 @@
 import Redis from "ioredis";
 
-let client: Redis | null = null;
+class RedisClient {
+  readonly client: Redis;
 
-export function getRedisClient(): Redis {
-  if (!client) {
+  constructor() {
     const url = process.env.REDIS_URL || "redis://localhost:6379";
-    client = new Redis(url, {
+    this.client = new Redis(url, {
       maxRetriesPerRequest: 3,
       lazyConnect: true,
     });
 
-    client.on("connect", () => console.log("[redis] connected"));
-    client.on("error", (err) => console.error("[redis] error:", err.message));
+    this.client.on("connect", () => console.log("[redis] connected"));
+    this.client.on("error", (err) => console.error("[redis] error:", err.message));
   }
-  return client;
+
+  async cacheGet<T>(key: string): Promise<T | null> {
+    try {
+      const val = await this.client.get(key);
+      return val ? (JSON.parse(val) as T) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async cacheSet(key: string, value: unknown, ttlSeconds: number): Promise<void> {
+    try {
+      await this.client.set(key, JSON.stringify(value), "EX", ttlSeconds);
+    } catch (err) {
+      console.error("[redis] cache set failed:", err);
+    }
+  }
+
+  async cacheDel(key: string): Promise<void> {
+    try {
+      await this.client.del(key);
+    } catch (err) {
+      console.error("[redis] cache del failed:", err);
+    }
+  }
 }
 
-export async function cacheGet<T>(key: string): Promise<T | null> {
-  try {
-    const val = await getRedisClient().get(key);
-    return val ? (JSON.parse(val) as T) : null;
-  } catch {
-    return null;
-  }
-}
+// Instantiated once here so every importer shares the single underlying
+// ioredis connection. Only the methods listed below are part of the public
+// surface — anything not exposed here isn't reachable as `redis.x`.
+const instance = new RedisClient();
 
-export async function cacheSet(key: string, value: unknown, ttlSeconds: number): Promise<void> {
-  try {
-    await getRedisClient().set(key, JSON.stringify(value), "EX", ttlSeconds);
-  } catch (err) {
-    console.error("[redis] cache set failed:", err);
-  }
-}
-
-export async function cacheDel(key: string): Promise<void> {
-  try {
-    await getRedisClient().del(key);
-  } catch (err) {
-    console.error("[redis] cache del failed:", err);
-  }
-}
+export const redis = {
+  client: instance.client,
+  cacheGet: instance.cacheGet.bind(instance),
+  cacheSet: instance.cacheSet.bind(instance),
+  cacheDel: instance.cacheDel.bind(instance),
+};

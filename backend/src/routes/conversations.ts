@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { authenticate } from "../middleware/requestHandler";
 import { AuthRequest } from "../types/index";
-import * as conv from "../services/conversationService";
+import { conversationService } from "../services/conversationService";
 
 const router = Router();
 
@@ -15,7 +15,7 @@ router.use(authenticate);
 router.get("/", async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const conversations = await conv.getConversations(userId);
+    const conversations = await conversationService.getConversations(userId);
     res.json({ success: true, data: conversations });
   } catch (err) {
     console.error("[conversations] GET /", err);
@@ -30,7 +30,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
 router.get("/:id/messages", async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const messages = await conv.getMessages(req.params.id as string, userId);
+    const messages = await conversationService.getMessages(req.params.id as string, userId);
     res.json({ success: true, data: messages });
   } catch (err) {
     console.error("[conversations] GET /:id/messages", err);
@@ -59,14 +59,14 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const conversation = await conv.getOrCreateConversation(userId, sessionId, userMessage);
+    const conversation = await conversationService.getOrCreateConversation(userId, sessionId, userMessage);
 
     const [userMsg, assistantMsg] = await Promise.all([
-      conv.addMessage(conversation.id, "user", userMessage),
-      conv.addMessage(conversation.id, "assistant", assistantMessage),
+      conversationService.addMessage(conversation.id, "user", userMessage),
+      conversationService.addMessage(conversation.id, "assistant", assistantMessage),
     ]);
 
-    await conv.touchConversation(sessionId);
+    await conversationService.touchConversation(sessionId);
 
     res.status(201).json({
       success: true,
@@ -85,7 +85,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
 router.delete("/:id", async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const deleted = await conv.deleteConversation(req.params.id as string, userId);
+    const deleted = await conversationService.deleteConversation(req.params.id as string, userId);
     if (!deleted) {
       res.status(404).json({ success: false, error: "Conversation not found" });
       return;

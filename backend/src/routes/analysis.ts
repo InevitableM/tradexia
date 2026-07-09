@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { authenticate } from "../middleware/requestHandler";
 import { AuthRequest } from "../types";
 import { runAnalysis, streamAnalysis } from "../services/adkClient";
-import { checkAndIncrementAnalysisQuota } from "../services/backendSdk";
+import { backendSdk } from "../services/backendSdk";
 
 const router = Router();
 
@@ -23,7 +23,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
 
     const userId = req.user!.userId;
 
-    const quota = await checkAndIncrementAnalysisQuota(userId);
+    const quota = await backendSdk.checkAndIncrementAnalysisQuota(userId);
     if (!quota.allowed) {
       res.status(429).json({
         success: false,
@@ -55,7 +55,7 @@ router.post("/stream", authenticate, async (req: AuthRequest, res: Response) => 
   const userId = req.user!.userId;
   const accessToken = req.headers.authorization!.slice(7);
 
-  const quota = await checkAndIncrementAnalysisQuota(userId);
+  const quota = await backendSdk.checkAndIncrementAnalysisQuota(userId);
   if (!quota.allowed) {
     res.status(429).json({
       success: false,
