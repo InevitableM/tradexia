@@ -27,7 +27,9 @@ class DbClient {
   readonly prisma: PrismaClient;
 
   constructor() {
-    const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+    const adapter = new PrismaPg({
+      connectionString: process.env.DATABASE_URL!,
+    });
     this.prisma = new PrismaClient({ adapter, log: ["query", "error"] });
   }
 
@@ -42,7 +44,9 @@ class DbClient {
       WHERE email = ${email}
       LIMIT 1
     `;
-    console.log(`[dbService] findUserByEmail ← ${rows[0] ? "found" : "not found"}`);
+    console.log(
+      `[dbService] findUserByEmail ← ${rows[0] ? "found" : "not found"}`,
+    );
     return rows[0] ?? null;
   }
 
@@ -63,7 +67,9 @@ class DbClient {
   // createUser
   // -------------------------------------------------------------------------
   async createUser(input: CreateUserInput): Promise<UserRow> {
-    console.log(`[dbService] createUser → email=${input.email} name=${input.name ?? null}`);
+    console.log(
+      `[dbService] createUser → email=${input.email} name=${input.name ?? null}`,
+    );
     const { email, passwordHash, name } = input;
     const rows = await this.prisma.$queryRaw<UserRow[]>`
       INSERT INTO users (email, "passwordHash", name, "isVerified", "createdAt", "updatedAt")
@@ -77,7 +83,10 @@ class DbClient {
   // -------------------------------------------------------------------------
   // updateUser
   // -------------------------------------------------------------------------
-  async updateUser(id: string, input: UpdateUserInput): Promise<UserRow | null> {
+  async updateUser(
+    id: string,
+    input: UpdateUserInput,
+  ): Promise<UserRow | null> {
     const fields: string[] = [];
     const values: unknown[] = [];
 
@@ -101,7 +110,11 @@ class DbClient {
       RETURNING id, email, password_hash, name, created_at, updated_at
     `;
 
-    const rows = await this.prisma.$queryRawUnsafe<UserRow[]>(query, ...values, id);
+    const rows = await this.prisma.$queryRawUnsafe<UserRow[]>(
+      query,
+      ...values,
+      id,
+    );
     return rows[0] ?? null;
   }
 
@@ -136,7 +149,10 @@ class DbClient {
   // itself, only the params.
   // -------------------------------------------------------------------------
 
-  async runQuery<T = unknown>(query: string, params: unknown[] = []): Promise<T[]> {
+  async runQuery<T = unknown>(
+    query: string,
+    params: unknown[] = [],
+  ): Promise<T[]> {
     return this.prisma.$queryRawUnsafe<T[]>(query, ...params);
   }
 

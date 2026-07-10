@@ -12,9 +12,12 @@ export interface QuotaCheckResult {
 }
 
 class BackendSdk {
-  async checkAndIncrementAnalysisQuota(userId: string): Promise<QuotaCheckResult> {
+  async checkAndIncrementAnalysisQuota(
+    userId: string,
+  ): Promise<QuotaCheckResult> {
     const dailyLimit = Number(process.env.DAILY_ANALYSIS_LIMIT) || 20;
-    const windowSeconds = Number(process.env.ANALYSIS_QUOTA_WINDOW_SECONDS) || 24 * 60 * 60;
+    const windowSeconds =
+      Number(process.env.ANALYSIS_QUOTA_WINDOW_SECONDS) || 24 * 60 * 60;
 
     const client = redis.client;
     const key = `quota:analysis:${userId}`;
@@ -44,7 +47,12 @@ class BackendSdk {
     } catch (err) {
       console.error("[backendSdk] quota check failed, failing open:", err);
       // If Redis is down, don't block users from using the app — fail open.
-      return { allowed: true, remaining: dailyLimit, limit: dailyLimit, resetsInSeconds: windowSeconds };
+      return {
+        allowed: true,
+        remaining: dailyLimit,
+        limit: dailyLimit,
+        resetsInSeconds: windowSeconds,
+      };
     }
   }
 }
@@ -54,5 +62,6 @@ class BackendSdk {
 const instance = new BackendSdk();
 
 export const backendSdk = {
-  checkAndIncrementAnalysisQuota: instance.checkAndIncrementAnalysisQuota.bind(instance),
+  checkAndIncrementAnalysisQuota:
+    instance.checkAndIncrementAnalysisQuota.bind(instance),
 };

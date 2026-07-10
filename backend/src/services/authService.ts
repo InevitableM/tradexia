@@ -7,11 +7,11 @@ import { db } from "./dbService";
 import { sendVerificationEmail } from "./emailService";
 import { AuthPayload } from "../types";
 
-const REFRESH_TTL        = 30 * 24 * 60 * 60; // 30 days
-const VERIFY_TTL         = 24 * 60 * 60;       // 24 hours
-const RESEND_COOLDOWN    = 60;                  // 60 seconds between resends
-const BCRYPT_ROUNDS      = 12;
-const GOOGLE_SIGNUP_TTL  = "10m";
+const REFRESH_TTL = 30 * 24 * 60 * 60; // 30 days
+const VERIFY_TTL = 24 * 60 * 60; // 24 hours
+const RESEND_COOLDOWN = 60; // 60 seconds between resends
+const BCRYPT_ROUNDS = 12;
+const GOOGLE_SIGNUP_TTL = "10m";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -23,16 +23,14 @@ function getSecret(): string {
 
 function issueTokens(userId: string, email: string) {
   const secret = getSecret();
-  const accessToken = jwt.sign(
-    { userId, email },
-    secret,
-    { expiresIn: (process.env.JWT_EXPIRES_IN || "7d") as jwt.SignOptions["expiresIn"] }
-  );
-  const refreshToken = jwt.sign(
-    { userId, email },
-    secret,
-    { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || "30d") as jwt.SignOptions["expiresIn"] }
-  );
+  const accessToken = jwt.sign({ userId, email }, secret, {
+    expiresIn: (process.env.JWT_EXPIRES_IN ||
+      "7d") as jwt.SignOptions["expiresIn"],
+  });
+  const refreshToken = jwt.sign({ userId, email }, secret, {
+    expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN ||
+      "30d") as jwt.SignOptions["expiresIn"],
+  });
   return { accessToken, refreshToken };
 }
 
@@ -102,7 +100,13 @@ export async function login(input: LoginInput): Promise<AuthResult> {
   const { accessToken, refreshToken } = issueTokens(user.id, email);
   await redis.cacheSet(`refresh:${user.id}`, refreshToken, REFRESH_TTL);
 
-  return { userId: user.id, email, name: user.name ?? undefined, accessToken, refreshToken };
+  return {
+    userId: user.id,
+    email,
+    name: user.name ?? undefined,
+    accessToken,
+    refreshToken,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +131,8 @@ export async function resendVerification(email: string): Promise<void> {
   // Rate-limit: one resend per 60 seconds per user
   const cooldownKey = `resend:${user.id}`;
   const onCooldown = await redis.cacheGet<string>(cooldownKey);
-  if (onCooldown) throw new Error("Please wait before requesting another email");
+  if (onCooldown)
+    throw new Error("Please wait before requesting another email");
 
   const token = crypto.randomBytes(32).toString("hex");
   await redis.cacheSet(`verify:${token}`, user.id, VERIFY_TTL);
@@ -148,9 +153,13 @@ export async function refreshTokens(token: string): Promise<RefreshResult> {
   const payload = jwt.verify(token, getSecret()) as AuthPayload;
 
   const stored = await redis.cacheGet<string>(`refresh:${payload.userId}`);
-  if (!stored || stored !== token) throw new Error("Refresh token invalid or revoked");
+  if (!stored || stored !== token)
+    throw new Error("Refresh token invalid or revoked");
 
-  const { accessToken, refreshToken } = issueTokens(payload.userId, payload.email);
+  const { accessToken, refreshToken } = issueTokens(
+    payload.userId,
+    payload.email,
+  );
   await redis.cacheSet(`refresh:${payload.userId}`, refreshToken, REFRESH_TTL);
 
   return { accessToken, refreshToken };
@@ -161,7 +170,10 @@ export async function refreshByUserId(userId: string): Promise<string> {
   if (!stored) throw new Error("Session expired or not found");
 
   const payload = jwt.verify(stored, getSecret()) as AuthPayload;
-  const { accessToken, refreshToken } = issueTokens(payload.userId, payload.email);
+  const { accessToken, refreshToken } = issueTokens(
+    payload.userId,
+    payload.email,
+  );
   await redis.cacheSet(`refresh:${userId}`, refreshToken, REFRESH_TTL);
 
   return accessToken;
@@ -210,14 +222,20 @@ export async function googleLogin(idToken: string): Promise<GoogleLoginResult> {
 
     return {
       status: "logged_in",
-      result: { userId: user.id, email, name: user.name ?? undefined, accessToken, refreshToken },
+      result: {
+        userId: user.id,
+        email,
+        name: user.name ?? undefined,
+        accessToken,
+        refreshToken,
+      },
     };
   }
 
   const signupToken = jwt.sign(
     { email, name, purpose: "google-signup" } satisfies GoogleSignupPayload,
     getSecret(),
-    { expiresIn: GOOGLE_SIGNUP_TTL }
+    { expiresIn: GOOGLE_SIGNUP_TTL },
   );
 
   return { status: "new_user", signupToken, email, name };
@@ -229,9 +247,12 @@ export interface CompleteGoogleSignupInput {
   name?: string;
 }
 
-export async function completeGoogleSignup(input: CompleteGoogleSignupInput): Promise<AuthResult> {
+export async function completeGoogleSignup(
+  input: CompleteGoogleSignupInput,
+): Promise<AuthResult> {
   const { signupToken, password, name } = input;
-  if (!password || password.length < 8) throw new Error("Password must be at least 8 characters");
+  if (!password || password.length < 8)
+    throw new Error("Password must be at least 8 characters");
 
   let payload: GoogleSignupPayload;
   try {
@@ -239,7 +260,8 @@ export async function completeGoogleSignup(input: CompleteGoogleSignupInput): Pr
   } catch {
     throw new Error("Signup session expired, please sign in with Google again");
   }
-  if (payload.purpose !== "google-signup") throw new Error("Invalid signup token");
+  if (payload.purpose !== "google-signup")
+    throw new Error("Invalid signup token");
 
   const existing = await db.findUserByEmail(payload.email);
   if (existing) throw new Error("Email already registered");
@@ -255,5 +277,11 @@ export async function completeGoogleSignup(input: CompleteGoogleSignupInput): Pr
   const { accessToken, refreshToken } = issueTokens(user.id, user.email);
   await redis.cacheSet(`refresh:${user.id}`, refreshToken, REFRESH_TTL);
 
-  return { userId: user.id, email: user.email, name: user.name ?? undefined, accessToken, refreshToken };
+  return {
+    userId: user.id,
+    email: user.email,
+    name: user.name ?? undefined,
+    accessToken,
+    refreshToken,
+  };
 }
