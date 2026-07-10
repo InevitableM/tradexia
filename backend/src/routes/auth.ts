@@ -5,7 +5,9 @@ const router = Router();
 
 // POST /api/auth/register
 router.post("/register", async (req: Request, res: Response) => {
-  console.log(`[route] POST /api/auth/register body=${JSON.stringify({ ...req.body, password: "***" })}`);
+  console.log(
+    `[route] POST /api/auth/register body=${JSON.stringify({ ...req.body, password: "***" })}`,
+  );
   try {
     const result = await authService.register(req.body);
     res.status(201).json({ success: true, data: result });
@@ -21,17 +23,23 @@ router.post("/register", async (req: Request, res: Response) => {
 router.post("/login", async (req: Request, res: Response) => {
   try {
     const result = await authService.login(req.body);
-    res.json({ success: true, data: {
-      userId: result.userId,
-      email: result.email,
-      name: result.name,
-      accessToken: result.accessToken,
-    }});
+    res.json({
+      success: true,
+      data: {
+        userId: result.userId,
+        email: result.email,
+        name: result.name,
+        accessToken: result.accessToken,
+      },
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Login failed";
-    const status = message === "Invalid credentials" ? 401
-                 : message === "Email not verified"  ? 403
-                 : 400;
+    const status =
+      message === "Invalid credentials"
+        ? 401
+        : message === "Email not verified"
+          ? 403
+          : 400;
     res.status(status).json({ success: false, error: message });
   }
 });
@@ -66,10 +74,17 @@ router.post("/resend-verification", async (req: Request, res: Response) => {
     }
     await authService.resendVerification(email);
     // Always return success to avoid revealing whether the email exists
-    res.json({ success: true, data: { message: "If that email is registered, a new verification link has been sent" } });
+    res.json({
+      success: true,
+      data: {
+        message:
+          "If that email is registered, a new verification link has been sent",
+      },
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to resend";
-    const status = message === "Please wait before requesting another email" ? 429 : 400;
+    const status =
+      message === "Please wait before requesting another email" ? 429 : 400;
     res.status(status).json({ success: false, error: message });
   }
 });
@@ -85,23 +100,30 @@ router.post("/google", async (req: Request, res: Response) => {
     const outcome = await authService.googleLogin(idToken);
 
     if (outcome.status === "logged_in") {
-      res.json({ success: true, data: {
-        status: "logged_in",
-        userId: outcome.result.userId,
-        email: outcome.result.email,
-        name: outcome.result.name,
-        accessToken: outcome.result.accessToken,
-      }});
+      res.json({
+        success: true,
+        data: {
+          status: "logged_in",
+          userId: outcome.result.userId,
+          email: outcome.result.email,
+          name: outcome.result.name,
+          accessToken: outcome.result.accessToken,
+        },
+      });
     } else {
-      res.json({ success: true, data: {
-        status: "new_user",
-        signupToken: outcome.signupToken,
-        email: outcome.email,
-        name: outcome.name,
-      }});
+      res.json({
+        success: true,
+        data: {
+          status: "new_user",
+          signupToken: outcome.signupToken,
+          email: outcome.email,
+          name: outcome.name,
+        },
+      });
     }
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Google sign-in failed";
+    const message =
+      err instanceof Error ? err.message : "Google sign-in failed";
     console.error(`[route] google login failed — ${message}`);
     res.status(401).json({ success: false, error: message });
   }
@@ -111,14 +133,18 @@ router.post("/google", async (req: Request, res: Response) => {
 router.post("/google/complete", async (req: Request, res: Response) => {
   try {
     const result = await authService.completeGoogleSignup(req.body);
-    res.status(201).json({ success: true, data: {
-      userId: result.userId,
-      email: result.email,
-      name: result.name,
-      accessToken: result.accessToken,
-    }});
+    res.status(201).json({
+      success: true,
+      data: {
+        userId: result.userId,
+        email: result.email,
+        name: result.name,
+        accessToken: result.accessToken,
+      },
+    });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Could not complete signup";
+    const message =
+      err instanceof Error ? err.message : "Could not complete signup";
     const status = message === "Email already registered" ? 409 : 400;
     res.status(status).json({ success: false, error: message });
   }
