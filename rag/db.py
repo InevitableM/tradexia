@@ -4,6 +4,7 @@ Connected once at app startup (server.py's lifespan) and closed on shutdown.
 Only fetch()/execute() are exposed — callers never touch the pool directly.
 """
 import asyncpg
+from pgvector.asyncpg import register_vector
 from loguru import logger
 from config import get_settings
 
@@ -14,7 +15,14 @@ class Database:
 
     async def connect(self) -> None:
         settings = get_settings()
-        self._pool = await asyncpg.create_pool(settings.database_url)
+        logger.info(f"[db] connecting → {settings.database_url.split('@')[-1]}")
+        try:
+            # register_vector runs on every pooled connection so asyncpg knows
+            # how to encode/decode the VECTOR column type (list[float] <-> pgvector).
+            self._pool = await asyncpg.create_pool(settings.database_url, init=register_vector)
+        except Exception:
+            logger.exception("[db] connection failed")
+            raise
         logger.info("[db] connected")
 
     async def disconnect(self) -> None:
@@ -29,17 +37,33 @@ class Database:
         return self._pool
 
     async def fetch(self, query: str, *args) -> list[asyncpg.Record]:
-        return await self.pool.fetch(query, *args)
+        try:
+            return await self.pool.fetch(query, *args)
+        except Exception:
+            logger.exception(f"[db] fetch failed: {query.strip()[:100]}")
+            raise
 
     async def fetchrow(self, query: str, *args) -> asyncpg.Record | None:
-        return await self.pool.fetchrow(query, *args)
+        try:
+            return await self.pool.fetchrow(query, *args)
+        except Exception:
+            logger.exception(f"[db] fetchrow failed: {query.strip()[:100]}")
+            raise
 
     async def execute(self, query: str, *args) -> str:
-        return await self.pool.execute(query, *args)
+        try:
+            return await self.pool.execute(query, *args)
+        except Exception:
+            logger.exception(f"[db] execute failed: {query.strip()[:100]}")
+            raise
 
     async def executemany(self, query: str, args_list: list[tuple]) -> None:
-        async with self.pool.acquire() as conn:
-            await conn.executemany(query, args_list)
+        try:
+            async with self.pool.acquire() as conn:
+                await conn.executemany(query, args_list)
+        except Exception:
+            logger.exception(f"[db] executemany failed ({len(args_list)} rows): {query.strip()[:100]}")
+            raise
 
 
 # Instantiated once here; every importer shares the same pool.

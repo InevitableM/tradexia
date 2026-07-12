@@ -1,0 +1,41 @@
+Tata Consultancy Services (TCS) Annual Report FY2024-25 — Excerpt
+
+Revenue Sources
+
+TCS generates revenue primarily through information technology services,
+consulting, and business solutions offered to clients across multiple
+industry verticals. The company's revenue streams can be broadly categorized
+into the following segments:
+
+1. Banking, Financial Services and Insurance (BFSI): This remains the largest
+contributor to TCS's revenue, driven by digital transformation initiatives,
+core banking modernization, and regulatory compliance projects undertaken by
+global financial institutions.
+
+2. Retail and Consumer Business: Revenue from this segment comes from
+supply chain optimization, e-commerce platform development, and customer
+experience management solutions for retail clients worldwide.
+
+3. Communications, Media and Technology: TCS provides network modernization,
+OTT platform engineering, and IT infrastructure management services to
+telecom and media companies.
+
+4. Manufacturing: Industrial automation, IoT-enabled smart factory solutions,
+and enterprise resource planning implementations form the core of this
+segment's revenue.
+
+5. Life Sciences and Healthcare: Revenue here is driven by clinical trial
+management systems, healthcare data platforms, and regulatory compliance
+software for pharmaceutical and healthcare organizations.
+
+Geographically, North America continues to be the largest market, contributing
+a majority of total revenue, followed by Europe, and then the UK and India
+markets. The company continues to diversify its revenue base by expanding
+presence in emerging markets across Asia Pacific and the Middle East.
+
+Risk Factors
+
+The company's revenue is subject to currency fluctuation risk given its
+significant exposure to US Dollar and Euro denominated contracts. Additionally,
+client concentration in the BFSI sector means that regulatory changes in
+banking and financial services globally could materially impact revenue growth.

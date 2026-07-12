@@ -56,7 +56,7 @@ app = FastAPI(title="Tradexia ADK", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4000", "http://localhost:3000"],
+    allow_origins=[""],
     allow_methods=["*"],
     allow_headers=["*"],
 )
