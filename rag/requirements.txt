@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+asyncpg
+pydantic
+pydantic-settings
+google-genai
+tiktoken
+python-dotenv
+loguru
