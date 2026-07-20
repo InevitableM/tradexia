@@ -3,6 +3,7 @@ pgvector — routes/chunker/embeddings never talk to Postgres directly, only
 through this interface. Swapping vector stores later means changing only
 this file.
 """
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -34,7 +35,9 @@ class PgVectorStore(VectorStore):
         if not chunks:
             logger.warning("[vector_store] add() called with no chunks, skipping")
             return
-        logger.info(f"[vector_store] inserting {len(chunks)} chunk(s) into document_chunks")
+        logger.info(
+            f"[vector_store] inserting {len(chunks)} chunk(s) into document_chunks"
+        )
         # db.executemany already logs + reraises on failure — no need to
         # duplicate that here.
         await db.executemany(
@@ -69,7 +72,9 @@ class PgVectorStore(VectorStore):
                 ORDER BY c.embedding <=> $1
                 LIMIT $3
                 """,
-                query_embedding, symbol, top_k,
+                query_embedding,
+                symbol,
+                top_k,
             )
         else:
             rows = await db.fetch(
@@ -82,7 +87,8 @@ class PgVectorStore(VectorStore):
                 ORDER BY c.embedding <=> $1
                 LIMIT $2
                 """,
-                query_embedding, top_k,
+                query_embedding,
+                top_k,
             )
 
         logger.info(f"[vector_store] search ← {len(rows)} result(s)")
