@@ -8,6 +8,7 @@ officially supported tiers). Unlike the newer gemini-embedding-2, this model
 does NOT auto-normalize truncated vectors — we must L2-normalize manually or
 cosine similarity comparisons will be subtly wrong.
 """
+
 import math
 
 from google import genai
@@ -37,12 +38,16 @@ def _l2_normalize(vector: list[float]) -> list[float]:
 async def embed_text(text: str) -> list[float]:
     """Embed a single piece of text (typically a user's query)."""
     settings = get_settings()
-    logger.info(f"[embeddings] embed_text → {len(text)} chars, model={settings.embedding_model}, dim={settings.embedding_dimension}")
+    logger.info(
+        f"[embeddings] embed_text → {len(text)} chars, model={settings.embedding_model}, dim={settings.embedding_dimension}"
+    )
     try:
         result = await _get_client().aio.models.embed_content(
             model=settings.embedding_model,
             contents=text,
-            config=types.EmbedContentConfig(output_dimensionality=settings.embedding_dimension),
+            config=types.EmbedContentConfig(
+                output_dimensionality=settings.embedding_dimension
+            ),
         )
     except Exception:
         logger.exception("[embeddings] embed_text failed")
@@ -58,12 +63,16 @@ async def embed_batch(texts: list[str]) -> list[list[float]]:
         logger.warning("[embeddings] embed_batch called with no texts")
         return []
     settings = get_settings()
-    logger.info(f"[embeddings] embed_batch → {len(texts)} chunk(s), model={settings.embedding_model}, dim={settings.embedding_dimension}")
+    logger.info(
+        f"[embeddings] embed_batch → {len(texts)} chunk(s), model={settings.embedding_model}, dim={settings.embedding_dimension}"
+    )
     try:
         result = await _get_client().aio.models.embed_content(
             model=settings.embedding_model,
             contents=texts,
-            config=types.EmbedContentConfig(output_dimensionality=settings.embedding_dimension),
+            config=types.EmbedContentConfig(
+                output_dimensionality=settings.embedding_dimension
+            ),
         )
     except Exception:
         logger.exception(f"[embeddings] embed_batch failed for {len(texts)} chunk(s)")
